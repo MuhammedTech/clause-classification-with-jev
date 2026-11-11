@@ -31,9 +31,9 @@ The fixed set of rules the experiment scores.
 The yes/no question asked of a clause for one rule: "does this clause contain X?"
 _Avoid_: compliance question, verdict
 
-**Present**:
-A clause is present for a rule when a highlight of that rule's category overlaps it, or when it sits directly under a lead-in whose only highlight is that lead-in; this is the gold label, derived from offsets rather than labelled by a lawyer per clause.
-_Avoid_: positive (in prose), match, hit
+**Touch**:
+A clause touches a highlight when they share any text, or when the clause sits directly under a lead-in that is itself the whole highlight.
+_Avoid_: overlap threshold, present, contains
 
 **Lead-in**:
 The introductory line of a clause that has lettered or numbered items under it ("Licensee commits to:").
@@ -58,7 +58,7 @@ _Avoid_: confidence, score, certainty
 One clause judged against one rule; the unit every outcome is counted on.
 
 **Lower Cutoff**:
-The P(yes) at or below which Jev's "no" for a rule is kept; it governs misses.
+The P(yes) at or below which Jev's "no" for a rule is kept; it governs missed highlights.
 _Avoid_: threshold (in prose), gate
 
 **Upper Cutoff**:
@@ -77,27 +77,26 @@ _Avoid_: routed, deferred, abstained
 A clause whose pairs are kept for every rule, so the expensive model would never be called on it.
 
 **Keep Share**:
-Kept pairs as a share of all pairs for a rule; the work Jev takes off the expensive model.
+The share of contract tokens whose pairs for a rule are kept; the work Jev takes off the expensive model, measured in text rather than unit count.
 _Avoid_: coverage, automation rate
 
-**Catch**:
-A kept pair where Jev says yes and the clause is present.
-_Avoid_: true positive (in prose), hit
+**Found Highlight**:
+A highlight with at least one touching clause kept as "yes".
+_Avoid_: catch, true positive (in prose), hit
 
-**Miss**:
-A kept pair where Jev says no but the clause is present; a problem nobody will look at.
-_Avoid_: false negative (in prose), leak
+**Pending Highlight**:
+A highlight with no touching clause kept as "yes" but at least one escalated; it waits on the expensive model.
+
+**Missed Highlight**:
+A highlight whose every touching clause is kept as "no"; a provision nobody will look at.
+_Avoid_: miss (of a clause), false negative (in prose), leak
 
 **False Alarm**:
-A kept pair where Jev says yes but the clause is not present.
+A clause kept as "yes" that touches no highlight of that rule.
 _Avoid_: false positive (in prose)
 
-**Clear**:
-A kept pair where Jev says no and the clause is not present.
-_Avoid_: true negative (in prose)
-
 **Miss Rate**:
-Misses as a share of all present pairs for a rule, kept or escalated.
+Missed highlights as a share of all highlights for a rule.
 
 **Fold**:
 One of five fixed groups of documents; a fold is always reported with a cutoff tuned on the other four.

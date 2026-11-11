@@ -48,26 +48,33 @@ A document-level interpretation of detections against the licensee's position (e
 A decision model that, given a question and a fixed answer set, returns one answer with a probability.
 _Avoid_: classifier, the model, LLM
 
-**Confidence**:
-The probability Jev attaches to its answer for one (clause, rule) pair.
-_Avoid_: score, certainty
+**P(yes)**:
+The probability Jev returns that a pair's detection question is answered yes.
+_Avoid_: confidence, score, certainty
 
 ### Cascade
 
 **Pair**:
 One clause judged against one rule; the unit every outcome is counted on.
 
-**Cutoff**:
-The confidence at or above which Jev's answer for a rule is accepted.
+**Lower Cutoff**:
+The P(yes) at or below which Jev's "no" for a rule is kept; it governs misses.
+_Avoid_: threshold (in prose), gate
+
+**Upper Cutoff**:
+The P(yes) at or above which Jev's "yes" for a rule is kept; it governs false alarms.
 _Avoid_: threshold (in prose), gate
 
 **Kept**:
-A pair whose confidence meets the cutoff, so Jev's answer stands and the expensive model never sees it.
+A pair whose P(yes) is at or below the lower cutoff or at or above the upper cutoff, so Jev's answer stands and the expensive model never sees it.
 _Avoid_: accepted, auto-decided
 
 **Escalated**:
-A pair whose confidence is below the cutoff, so it would go to the expensive model; never scored for accuracy.
+A pair whose P(yes) lies between the two cutoffs, so it would go to the expensive model; never scored for accuracy.
 _Avoid_: routed, deferred, abstained
+
+**Fully Cleared Clause**:
+A clause whose pairs are kept for every rule, so the expensive model would never be called on it.
 
 **Keep Share**:
 Kept pairs as a share of all pairs for a rule; the work Jev takes off the expensive model.

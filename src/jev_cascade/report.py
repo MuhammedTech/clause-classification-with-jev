@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from .corpus import GATE_MIN_DOCUMENTS, GATE_MIN_HIGHLIGHTS, CorpusFacts, RuleCounts
-from .evaluator import RuleMetrics
+from .evaluator import FullyBinned, RuleMetrics
 from .partition import PartitionFacts
 from .rulebook import (
     DROPPED_REASONS,
@@ -42,6 +42,7 @@ class ReportInputs:
 
     rules: Sequence[Rule]
     metrics: Sequence[RuleMetrics]
+    fully_binned: FullyBinned
     stats: RunStats
     cutoff: float
     model_version: str
@@ -316,7 +317,9 @@ def render(inputs: ReportInputs) -> str:
         )
         lines.append(
             f"| Precision | {_count_pair(metric.holding_escalated, metric.escalated_clauses)} "
-            f"Escalated Clauses hold a Highlight | {_format_share(metric.precision)} |"
+            f"Escalated Clauses hold a Highlight; base rate "
+            f"{_count_pair(metric.holding_clauses, metric.clauses)} Clauses "
+            f"({_format_share(metric.base_rate)}) | {_format_share(metric.precision)} |"
         )
         lines.append(
             f"| Provision Recall | "
@@ -331,18 +334,50 @@ def render(inputs: ReportInputs) -> str:
             f"| Binned Share | {_count_pair(metric.binned_words, metric.total_words)} words "
             f"Binned | {_format_share(metric.binned_share)} |"
         )
+        lines.append(
+            f"| False-alarm rate on Certified Negative documents | "
+            f"{_count_pair(metric.certified_negative_escalated, metric.certified_negative_clauses)} "
+            f"Clauses Escalated, in documents CUAD certifies hold no such clause | "
+            f"{_format_share(metric.false_alarm_rate)} |"
+        )
         lines.append("")
         lines.append(
             f"Supporting counts: {metric.clauses} Clauses, {metric.binned_clauses} Binned and "
-            f"{metric.escalated_clauses} Escalated; {metric.holding_clauses} hold a Highlight, a "
-            f"base rate of {_format_share(metric.base_rate)}."
+            f"{metric.escalated_clauses} Escalated; {metric.holding_clauses} hold a Highlight; "
+            f"{metric.certified_negative_clauses} Certified Negative and "
+            f"{metric.inferred_negative_clauses} Inferred Negative Clauses hold none."
         )
         lines.append("")
         lines.append(
-            "Precision reads low by arithmetic at this base rate, not because Jev is performing "
-            "badly. Always read it beside its counts."
+            "Precision reads in single digits by arithmetic at a base rate near 1%: Escalating "
+            "every Clause would score exactly the base rate printed beside it, so a low "
+            "Precision is not by itself Jev performing badly. Always read it beside its counts. "
+            "The false-alarm rate is a separate figure on a separate denominator, resting on "
+            "CUAD's explicit negatives alone with no Inferred Negative in it."
         )
         lines.append("")
+
+    fully = inputs.fully_binned
+    asked = len(inputs.rules)
+    lines.append("## Fully Binned Clauses")
+    lines.append("")
+    lines.append(
+        f"A Fully Binned Clause is Binned for every Rule asked in this run ({asked} "
+        f"Rule{'s' if asked != 1 else ''}), so the expensive model is never called on it. It is "
+        "the only saving that turns into money: per-Rule Binned Share does not combine into it."
+    )
+    lines.append("")
+    lines.append("| Figure | Counts | Share |")
+    lines.append("| --- | --- | --- |")
+    lines.append(
+        f"| Fully Binned Clauses | {_count_pair(fully.fully_binned_clauses, fully.clauses)} "
+        f"Clauses | {_format_share(fully.clause_share)} |"
+    )
+    lines.append(
+        f"| Fully Binned words | {_count_pair(fully.fully_binned_words, fully.total_words)} "
+        f"words | {_format_share(fully.word_share)} |"
+    )
+    lines.append("")
 
     lines.append("## What this does not measure")
     lines.append("")

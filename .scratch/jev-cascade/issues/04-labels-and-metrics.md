@@ -21,7 +21,7 @@ Cutoff, and returns these. It is pure: no folds, no tuning, no randomness.
 
 **Blocked by:** 03.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Evaluator tests (Seam A) cover:
   - a one-character overlap counts as holding
@@ -36,3 +36,19 @@ Cutoff, and returns these. It is pure: no folds, no tuning, no randomness.
 - [ ] No Cutoff tuning, fold assignment or overlap threshold exists anywhere in the code.
 - [ ] The report states that Precision reads in single digits by arithmetic at a ~1% base rate, and
       prints each Rule's base rate beside it.
+
+## Comments
+
+Resolved. `evaluate_rule` already held Clause Recall, Provision Recall, Precision, Lost Provisions and
+Binned Share from the tracer bullet; this ticket added what was missing:
+
+- Certified / Inferred Negative counts and the false-alarm rate on Certified Negative documents, via a
+  `certified_negative_docs` argument the pipeline fills from CUAD's `is_impossible`.
+- `fully_binned()`: Clauses Binned for every Rule asked, counted in Clauses and in words. The run asks
+  one Rule for now, and the report says "1 Rule" rather than claiming seven.
+- Report: false-alarm row, base rate beside Precision, the single-digits-by-arithmetic statement, and a
+  "Fully Binned Clauses" section.
+- `tests/test_no_tuning.py` checks identifiers, not prose, for fold / tune / threshold / random.
+
+The single-digits sentence says "near 1%" as a fixed statement; the Rule's own measured base rate is
+printed beside Precision, so the two can be compared.

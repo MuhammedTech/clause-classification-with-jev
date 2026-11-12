@@ -8,7 +8,7 @@ report can print "n/a" rather than inventing a zero.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Sequence
+from typing import Collection, Iterable, Mapping, Sequence
 
 from .domain import Clause, Highlight, holds
 
@@ -39,6 +39,22 @@ class RuleMetrics:
 
     total_words: int
     binned_words: int
+
+    #: Clauses holding nothing, split by whether CUAD certified their document as having no such
+    #: clause. `*_escalated` is how many of each Jev did not rule out.
+    certified_negative_clauses: int = 0
+    certified_negative_escalated: int = 0
+    inferred_negative_clauses: int = 0
+    inferred_negative_escalated: int = 0
+
+    @property
+    def false_alarm_rate(self) -> float | None:
+        """Of Clauses in Certified Negative documents, the share Escalated.
+
+        Reported apart from Precision because it rests on nothing but CUAD's explicit negatives:
+        no Inferred Negative is in it. `None` when no scored document is certified for the Rule.
+        """
+        return _share(self.certified_negative_escalated, self.certified_negative_clauses)
 
     @property
     def clause_recall(self) -> float | None:
@@ -80,10 +96,12 @@ def evaluate_rule(
     highlights: Iterable[Highlight],
     p_yes: Mapping[ClauseKey, float],
     cutoff: float,
+    certified_negative_docs: Collection[str] = frozenset(),
 ) -> RuleMetrics:
     """Evaluate one Rule at one Cutoff.
 
     A Pair whose P(yes) is at or below `cutoff` is Binned; above it, Escalated.
+    `certified_negative_docs` names the documents CUAD flags `is_impossible` for this Rule.
     """
     highlights = list(highlights)
 
@@ -102,11 +120,21 @@ def evaluate_rule(
 
     holding_clauses = 0
     holding_escalated = 0
+    certified_clauses = certified_escalated = 0
+    inferred_clauses = inferred_escalated = 0
     for clause in clauses:
         if any(holds(clause, h) for h in highlights):
             holding_clauses += 1
             if is_escalated(clause):
                 holding_escalated += 1
+        elif clause.doc_id in certified_negative_docs:
+            certified_clauses += 1
+            if is_escalated(clause):
+                certified_escalated += 1
+        else:
+            inferred_clauses += 1
+            if is_escalated(clause):
+                inferred_escalated += 1
 
     lost_provisions = 0
     for highlight in highlights:
@@ -132,4 +160,53 @@ def evaluate_rule(
         lost_provisions=lost_provisions,
         total_words=total_words,
         binned_words=binned_words,
+        certified_negative_clauses=certified_clauses,
+        certified_negative_escalated=certified_escalated,
+        inferred_negative_clauses=inferred_clauses,
+        inferred_negative_escalated=inferred_escalated,
+    )
+
+
+@dataclass(frozen=True)
+class FullyBinned:
+    """Clauses Binned for every Rule asked, so the expensive model is never called on them.
+
+    The only figure that becomes money: per-Rule Binned Share does not combine into it. Counted in
+    Clauses as the ticket asks, and in words as well, since words are what a reader is paid for.
+    """
+
+    clauses: int
+    fully_binned_clauses: int
+    total_words: int
+    fully_binned_words: int
+
+    @property
+    def clause_share(self) -> float | None:
+        return _share(self.fully_binned_clauses, self.clauses)
+
+    @property
+    def word_share(self) -> float | None:
+        return _share(self.fully_binned_words, self.total_words)
+
+
+def fully_binned(
+    clauses: Sequence[Clause],
+    p_yes_by_rule: Mapping[str, Mapping[ClauseKey, float]],
+    cutoff: float,
+) -> FullyBinned:
+    """Count the Clauses whose P(yes) is at or below `cutoff` for every Rule in the table."""
+    count = 0
+    words = 0
+    for clause in clauses:
+        for rule_id, table in p_yes_by_rule.items():
+            if clause.key not in table:
+                raise KeyError(f"Clause {clause.key} has no P(yes) for rule {rule_id}")
+        if all(table[clause.key] <= cutoff for table in p_yes_by_rule.values()):
+            count += 1
+            words += clause.word_count
+    return FullyBinned(
+        clauses=len(clauses),
+        fully_binned_clauses=count,
+        total_words=sum(c.word_count for c in clauses),
+        fully_binned_words=words,
     )

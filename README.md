@@ -35,7 +35,7 @@ uv run jev-cascade --rule R1 --cutoff 0.5 --out out
 | Module | What it owns |
 | --- | --- |
 | `config.py` | The CUAD path, the output directory, prices with their source and date |
-| `corpus.py` | The 53-document License Agreement Set, the join, and the Highlights |
+| `corpus.py` | The 53-document License Agreement Set, the join, the Highlights, and the gate |
 | `splitter.py` | Partitioning a document into Clauses |
 | `rulebook.py` | The seven Rules and their Detection Questions (ADR-0005) |
 | `jev.py` | The Jev client interface and the deterministic seeded stub |
@@ -46,6 +46,15 @@ uv run jev-cascade --rule R1 --cutoff 0.5 --out out
 
 ## Status
 
-Ticket 01, the tracer bullet, is built: one Rule (R1) on three documents with the stub client, at one
-fixed Cutoff. **Every figure it prints is stub-derived and carries no signal.** The remaining tickets
-in `.scratch/jev-cascade/issues/` deepen each stage.
+Tickets 01 and 02 are built. The run scores one Rule (R1) on three documents with the stub client at
+one fixed Cutoff, and **every figure it prints is stub-derived and carries no signal.** The report's
+Corpus and Rulebook sections, by contrast, are counted from CUAD over all 53 documents: the seven
+Rules with their document and span counts, and the gate, which all seven pass.
+
+The remaining tickets in `.scratch/jev-cascade/issues/` deepen each stage. Ticket 03 settles the
+Splitter, 04 and 05 the metrics and the Cutoff Curve, 07 the real Jev client, and 09 runs it.
+
+One decision is waiting on the user: **Uncapped Liability (R4) passes the gate** over all 53
+documents, at 17 documents and 26 spans. ADR-0005 dropped it partly for failing, measured before
+Pacira joined the corpus. It stays out for not being independent of R1, which the new counts do not
+change — see the correction note in ADR-0005.

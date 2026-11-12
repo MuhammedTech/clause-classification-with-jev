@@ -15,7 +15,7 @@ it is incomplete: 19 files ship for 510 documents and only 3 of these 53 have on
 byte-identical to their `context`, so the two sources are not known to disagree — there is simply
 not enough of one to use.
 
-This module also owns the **gate**: each Rule's document and span counts. They come from CUAD's
+This module also owns the **gate**: each Rule's document and Highlight counts. They come from CUAD's
 own annotations rather than from the Splitter, so the gate is settled here once and never
 re-checked after a run (ADR-0005).
 """
@@ -37,13 +37,14 @@ from .rulebook import DROPPED_RULES, RULEBOOK, Rule
 _NON_ALPHANUMERIC = re.compile(r"[^a-z0-9]")
 _EXTENSION = re.compile(r"\.(pdf|txt)$", re.IGNORECASE)
 
-#: The License Agreement Set is exactly this many documents. Asserted, not assumed.
+#: The License Agreement Set is exactly this many documents. `corpus_facts` refuses anything else.
 CORPUS_DOCUMENTS = 53
 
-#: The gate from ADR-0005: a Rule is worth asking only with this many documents carrying a span
-#: and this many spans in total. Below either, the denominators are too thin to read a curve off.
+#: The gate from ADR-0005: a Rule is worth asking only with this many documents carrying a
+#: Highlight and this many Highlights in total. Below either, the denominators are too thin to read
+#: a curve off. CUAD's own files call a Highlight a span; the glossary does not.
 GATE_MIN_DOCUMENTS = 15
-GATE_MIN_SPANS = 25
+GATE_MIN_HIGHLIGHTS = 25
 
 
 def join_key(name: str) -> str:
@@ -93,17 +94,26 @@ def _license_rows(csv_path: Path) -> list[dict[str, str]]:
     return [row for row in rows if "licen" in row["Document Name"].lower()]
 
 
-def filter_counts(directory: Path | None = None) -> dict[str, int]:
+@dataclass(frozen=True)
+class FilterCounts:
+    """What each of the three "licen" filters selects. Only the first is the set we use."""
+
+    csv_document_name: int
+    csv_filename: int
+    json_title: int
+
+
+def filter_counts(directory: Path | None = None) -> FilterCounts:
     """The three filters that give three different counts, so the difference stays documented."""
     directory = directory or config.cuad_dir()
     with config.master_clauses_csv(directory).open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
     records = _load_json(str(config.cuad_json(directory)))
-    return {
-        "csv_document_name": sum(1 for r in rows if "licen" in r["Document Name"].lower()),
-        "csv_filename": sum(1 for r in rows if "licen" in r["Filename"].lower()),
-        "json_title": sum(1 for r in records.values() if "licen" in r["title"].lower()),
-    }
+    return FilterCounts(
+        csv_document_name=sum(1 for r in rows if "licen" in r["Document Name"].lower()),
+        csv_filename=sum(1 for r in rows if "licen" in r["Filename"].lower()),
+        json_title=sum(1 for r in records.values() if "licen" in r["title"].lower()),
+    )
 
 
 def load_corpus(
@@ -196,8 +206,8 @@ class RuleCounts:
 
     rule_id: str
     cuad_category: str
-    documents_with_spans: int
-    spans: int
+    documents_with_highlights: int
+    highlights: int
     certified_negative_doc_ids: tuple[str, ...]
 
     @property
@@ -208,7 +218,15 @@ class RuleCounts:
 
     @property
     def passes_gate(self) -> bool:
-        return self.documents_with_spans >= GATE_MIN_DOCUMENTS and self.spans >= GATE_MIN_SPANS
+        return (
+            self.documents_with_highlights >= GATE_MIN_DOCUMENTS
+            and self.highlights >= GATE_MIN_HIGHLIGHTS
+        )
+
+    @property
+    def highlight_margin(self) -> int:
+        """Highlights above the gate's minimum. Negative when the Rule fails on that count."""
+        return self.highlights - GATE_MIN_HIGHLIGHTS
 
 
 def _rule_counts(
@@ -218,13 +236,13 @@ def _rule_counts(
     """Count one set of Rules over documents already loaded with those same Rules."""
     counts: list[RuleCounts] = []
     for rule_ in rules:
-        with_spans = [d for d in documents if d.highlights_for(rule_.id)]
+        with_highlights = [d for d in documents if d.highlights_for(rule_.id)]
         counts.append(
             RuleCounts(
                 rule_id=rule_.id,
                 cuad_category=rule_.cuad_category,
-                documents_with_spans=len(with_spans),
-                spans=sum(len(d.highlights_for(rule_.id)) for d in with_spans),
+                documents_with_highlights=len(with_highlights),
+                highlights=sum(len(d.highlights_for(rule_.id)) for d in with_highlights),
                 certified_negative_doc_ids=tuple(
                     d.doc_id for d in documents if d.is_certified_negative(rule_.id)
                 ),
@@ -237,7 +255,7 @@ def gate_counts(
     rules: Sequence[Rule] | None = None,
     directory: Path | None = None,
 ) -> tuple[RuleCounts, ...]:
-    """Each Rule's document and span counts over the **whole** corpus, with the gate result.
+    """Each Rule's document and Highlight counts over the **whole** corpus, with the gate result.
 
     Deliberately independent of whatever subset a run scores: the gate is a statement about the
     ground truth available, not about one run's documents, so it always loads all 53.
@@ -255,14 +273,14 @@ class CorpusFacts:
 
     documents: int
     characters: int
-    filter_counts: dict[str, int]
+    filters: FilterCounts
     gate: tuple[RuleCounts, ...]
     dropped: tuple[RuleCounts, ...]
 
     @property
-    def spans(self) -> int:
+    def highlights(self) -> int:
         """Highlights across the seven Rules of the Rulebook."""
-        return sum(c.spans for c in self.gate)
+        return sum(c.highlights for c in self.gate)
 
     @property
     def gate_passes(self) -> bool:
@@ -278,10 +296,16 @@ def corpus_facts(directory: Path | None = None) -> CorpusFacts:
     """
     rules = list(RULEBOOK) + list(DROPPED_RULES)
     documents = load_corpus(rules=rules, directory=directory)
+    if len(documents) != CORPUS_DOCUMENTS:
+        raise RuntimeError(
+            f"The License Agreement Set is {CORPUS_DOCUMENTS} documents, but the loader returned "
+            f"{len(documents)}. Every count the report states is per-corpus, so a short corpus "
+            "would silently understate the gate rather than fail."
+        )
     return CorpusFacts(
         documents=len(documents),
         characters=sum(len(d.text) for d in documents),
-        filter_counts=filter_counts(directory),
+        filters=filter_counts(directory),
         gate=_rule_counts(documents, RULEBOOK),
         dropped=_rule_counts(documents, DROPPED_RULES),
     )

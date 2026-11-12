@@ -49,10 +49,14 @@ count from CUAD annotations only, so nothing here moves when ticket 03 changes t
 **The gate argument for dropping R4 is no longer true, and the ticket's "turn the measured numbers
 into assertions" is what surfaced it.** Measured over all 53 documents, Uncapped Liability is **17
 documents and 26 spans** — one span above the gate of 15 and 25. ADR-0005's first reason, that it is
-the only Rule to fail, was measured before Pacira joined; Pacira alone carries 35 spans across the
-categories, 2 of them Uncapped Liability. R4 stays dropped on ADR-0005's second reason, which the
-new counts do not touch: it is not independent of R1, since uncapped liability appears here as a
-carve-out from a cap. That is a decision for the user to revisit, not for this ticket.
+the only Rule to fail, was measured before Pacira joined; Pacira carries **3** Uncapped Liability
+spans, which is the whole of the move from 23 to 26. R4 stays dropped on ADR-0005's second reason,
+which the new counts do not touch: it is not independent of R1, since uncapped liability appears
+here as a carve-out from a cap. That is a decision for the user to revisit, not for this ticket.
+
+Being compound is **not** cited as a reason anywhere, in code or in the report, and the ADR note now
+says why not: R2 and R6 were also to be asked as sub-questions and both survive, so it does not
+distinguish R4. Independence is the only argument that does.
 
 Corrected in four places rather than restated: `docs/cuad-ground-truth.md` (the whole per-Rule table
 is now Pacira-inclusive, with the old figures kept in a "was, without Pacira" column), a dated
@@ -91,3 +95,62 @@ spec and all nine tickets use; it has one now.
 
 Deliberately not done here: the run still scores R1 on the three tracer documents. Asking all seven
 Rules over all 53 documents is ticket 09, and the Splitter is ticket 03.
+
+### What the two-axis review changed
+
+The Spec axis re-measured R4 from CUAD independently and agreed: 17 documents, 26 Highlights, 36
+certified. It then caught **two wrong claims of mine and one weak one**, all now fixed.
+
+- **Pacira's contribution was stated wrongly.** I wrote that Pacira carries "35 spans across the
+  categories, 2 of them Uncapped Liability". Measured: Pacira carries **3** Uncapped Liability
+  Highlights, which is the whole of the move from 23 to 26; the 35 is its seven-Rule total, which
+  excludes Uncapped Liability, and its all-category total is 83. A wrong number inside the very note
+  that says "the first argument must not be repeated" is the worst place for one.
+- **"It was also one of the compound Rules" is not a reason.** R2 and R6 were also to be asked as
+  sub-questions and both survive, so being compound does not distinguish R4. It is gone from
+  `DROPPED_REASONS`, from the rulebook docstring and from the report; ADR-0005's note now says why it
+  is not a ground, and a Seam C test fails if the word reappears in the report.
+- **The corpus size at the top of `docs/cuad-ground-truth.md` was still pre-Pacira** (2,845,654
+  characters, "roughly 474,000 words") while this ticket asserts 2,990,822 three sections later. Now
+  2,990,822 characters, 447,653 words, median 35,902, smallest 1,707, with the old figures explained
+  as the 52 documents without Pacira.
+- **R4 had an invented Detection Question** in `DROPPED_RULES`. ADR-0005 drafts wording only for
+  Rules that are asked, and all wording needs the user's review in ticket 08, so a dropped Rule now
+  carries none — and the report says so.
+
+The Standards axis found a vocabulary violation I had created myself. `GLOSSARY.md` lists **span**
+among the words to avoid for **Highlight**, and the Gate entry I added says "Highlight" while the
+code and report I wrote said "span" — one commit contradicting itself.
+
+- Renamed throughout: `GATE_MIN_SPANS` to `GATE_MIN_HIGHLIGHTS`, `RuleCounts.spans` to `highlights`,
+  `documents_with_spans` to `documents_with_highlights`, `CorpusFacts.spans` to `highlights`. The
+  report's table header and prose say Highlight. `docs/cuad-ground-truth.md` keeps CUAD's own word,
+  with a note at the top reconciling the two, since it is a description of CUAD's files.
+- `Clause.span_key` and the "character span" senses are untouched: the glossary avoids *span* as a
+  synonym for Highlight, not as a character range.
+
+Three tests it showed were weaker than they looked:
+
+- The Certified Negative test re-derived everything it asserted. It now builds the expected set from
+  `is_impossible` in the raw JSON and compares the loader's exposed ids to it, so a loader that
+  dropped or invented one disagrees.
+- The gate test imported `GATE_MIN_*` and recomputed `passes_gate` exactly as the property does, so
+  a lowered threshold would still pass. It now writes 15 and 25 out literally, and a new
+  `tests/test_gate.py` checks the boundary on hand-built counts (15/25 passes, 14 documents fails,
+  24 Highlights fails) with no dataset needed, so it runs everywhere.
+- `assert "CUAD" in markdown` could not fail; it asserts "not from the Splitter" now. The gate-table
+  assertions parse rows by Rule id instead of counting pipes and splitting on section headings.
+
+Also from its judgement calls: ADR-0005's superseded 16 and 23 moved out of the renderer into
+`SUPERSEDED_GATE_COUNTS`, so the report states no number of its own and the "by one Highlight"
+phrase is arithmetic from `highlight_margin`; `rule("R4")`'s error message no longer carries counts
+that can go stale; `filter_counts()` returns a typed `FilterCounts` rather than a dict with string
+keys shared across two modules; and `CORPUS_DOCUMENTS = 53` is now actually enforced —
+`corpus_facts` refuses a short corpus rather than silently understating every count.
+
+Left as is, with reasons: `**Status:** resolved` keeps ticket 01's convention rather than
+`triage-labels.md`'s five roles, since 01 established it deliberately; and the one-sentence caveat
+that the surviving Rules read optimistically is ticket 05's checkbox, kept here because the Rulebook
+section would otherwise invite exactly the misreading ADR-0005 warns about.
+
+**89 tests pass, plus the 1 xfail.**

@@ -126,6 +126,16 @@ def test_the_report_states_the_corpus_filter_and_the_pacira_normalisation(tmp_pa
     assert "PACIRA" in markdown.upper()
 
 
+def _gate_rows(markdown: str) -> dict[str, str]:
+    """The gate table's rows, keyed by Rule id, so assertions do not count table pipes."""
+    rows = {}
+    for line in markdown.splitlines():
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) == 6 and cells[0] in {rule_.id for rule_ in RULEBOOK} | {"R4"}:
+            rows[cells[0]] = line
+    return rows
+
+
 def test_the_report_shows_all_seven_rules_with_their_counts_and_a_passing_gate(tmp_path):
     markdown = run(client=StubJevClient(), out_dir=tmp_path).markdown
 
@@ -133,11 +143,15 @@ def test_the_report_shows_all_seven_rules_with_their_counts_and_a_passing_gate(t
     for rule_ in RULEBOOK:
         assert rule_.cuad_category in markdown, rule_.id
         assert rule_.detection_question in markdown, rule_.id
-    # The full-corpus counts, not the tracer subset: R8 at 41 documents, 85 spans, 12 certified.
-    assert "| 41 | 85 | 12 | pass |" in markdown
-    assert markdown.count("| pass |") == 7
-    # The gate is settled from CUAD spans, so it never depends on the Splitter.
-    assert "CUAD" in markdown
+
+    rows = _gate_rows(markdown)
+    assert sorted(rows) == ["R1", "R2", "R3", "R5", "R6", "R7", "R8"]
+    for rule_id, row in rows.items():
+        assert row.rstrip().endswith("| pass |"), row
+    # Full-corpus counts, not the tracer subset: R8 at 41 documents and 85 Highlights.
+    assert "| 41 | 85 | 12 | pass |" in rows["R8"]
+    # The gate is settled from CUAD's annotations, so it never depends on the Splitter.
+    assert "not from the Splitter" in markdown
 
 
 def test_the_gate_is_corpus_wide_even_when_the_run_scores_one_document(tmp_path):
@@ -145,7 +159,7 @@ def test_the_gate_is_corpus_wide_even_when_the_run_scores_one_document(tmp_path)
         client=StubJevClient(), doc_ids=TRACER_DOC_IDS[:1], out_dir=tmp_path
     ).markdown
 
-    assert "| 41 | 85 | 12 | pass |" in markdown
+    assert "| 41 | 85 | 12 | pass |" in _gate_rows(markdown)["R8"]
     assert "53 documents" in markdown
 
 
@@ -153,17 +167,20 @@ def test_the_report_gives_the_corrected_reason_uncapped_liability_was_dropped(tm
     markdown = run(client=StubJevClient(), out_dir=tmp_path).markdown
 
     assert "Uncapped Liability" in markdown
-    # Dropped, so never asked as a Rule.
+    # Dropped, so never asked as a Rule: no scored section, and no row in the gate table.
     assert "## R4" not in markdown
-    assert "R4" not in markdown.split("## Rulebook")[1].split("## ")[0].split("Dropped")[0]
-    # Measured on all 53 documents, where it passes the gate by one span.
-    assert "17 documents" in markdown
-    assert "26 spans" in markdown
+    assert "R4" not in _gate_rows(markdown)
+    # Measured on all 53 documents, where it passes the gate by one Highlight.
+    assert "17 documents and 26 Highlights" in markdown
+    assert "passes the gate by one Highlight" in markdown
     assert "not independent of R1" in markdown
     # The reason ADR-0005 gave before Pacira joined may appear only as a superseded measurement,
     # never as the standing reason.
     assert "only Rule failing" not in markdown
-    assert "measured before Pacira joined" in markdown
+    assert "the gate is not a reason to drop this Rule" in markdown
+    assert "superseded" in markdown
+    # Being compound does not distinguish R4 from R2 and R6, which survive, so it is not given.
+    assert "compound" not in markdown
 
 
 def test_the_report_warns_that_r5_and_r8_changed_meaning(tmp_path):

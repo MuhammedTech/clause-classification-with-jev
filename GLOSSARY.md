@@ -151,4 +151,4 @@ not reuse them.
 | Touch | Renamed Holds |
 | Lead-in | Renamed Parent Line, and the lead-in touch rule is dropped (ADR-0004) |
 | Sub-question | Dropped; one question per Rule (ADR-0005) |
-| Uncapped Liability / R4 | Dropped as not independent of R1 (ADR-0005). It was dropped for failing the gate, but on all 53 documents it passes at 17 documents and 26 spans; see the correction note in ADR-0005 |
+| Uncapped Liability / R4 | Dropped as not independent of R1 (ADR-0005). It was dropped for failing the gate, but on all 53 documents it passes at 17 documents and 26 Highlights; see the correction note in ADR-0005 |

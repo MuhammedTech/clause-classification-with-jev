@@ -3,6 +3,11 @@
 Everything here was measured directly from the CUAD v1 files on 2026-11-11. Do not re-derive it;
 correct it if a later run disagrees.
 
+**A note on one word.** This file says "span" throughout, because that is what CUAD's own files and
+README call an annotated range. In the project's vocabulary that thing is a **Highlight**, and
+`GLOSSARY.md` lists "span" among the words to avoid for it. Code, tests and the report say Highlight;
+this file keeps CUAD's word when describing CUAD's files. They are the same thing.
+
 ## Where the data is
 
 The dataset is **not in this repo**. It lives at:
@@ -32,8 +37,11 @@ CSV on `Document Name` and then join to the JSON on `Filename` against `title`.
 alphanumerics only, lowercased. With that, **all 53 resolve and none are missing**. Without it exactly
 one fails: Pacira, whose filename says `A&R` where the JSON title says `A_R`.
 
-Corpus size: 2,845,654 characters, roughly 474,000 words. Median contract 35,703 characters, largest
-272,018.
+Corpus size, re-measured on 2026-11-12 over all 53 documents with Pacira counted: **2,990,822
+characters**, 447,653 words. Median contract 35,902 characters, largest 272,018, smallest 1,707.
+Pacira alone is 145,168 characters, so the 2,845,654 and "roughly 474,000 words" recorded here
+earlier were the 52 documents without it; the character figure is asserted in
+`tests/test_corpus.py`.
 
 ## Span offsets are exact
 

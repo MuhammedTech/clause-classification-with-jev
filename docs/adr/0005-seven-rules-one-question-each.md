@@ -65,11 +65,18 @@ could be. If a later run shows those two trailing, splitting them is the first t
 Measured by the ticket 02 corpus loader over all 53 documents, **Uncapped Liability is 17 documents
 and 26 spans**, one span above the gate. The 16 and 23 recorded above were measured before Pacira
 joined the corpus — it joins only once the filename-to-title comparison normalises `A&R` against
-`A_R` — and Pacira carries spans for six of the seven rules plus two for Uncapped Liability.
+`A_R` — and Pacira carries **3** Uncapped Liability spans, which is the whole of the difference
+between 23 and 26. (It also carries 35 spans across the seven Rulebook rules, and 83 across all 41
+CUAD categories, but those are not what moved this row.)
 
 **The decision does not change.** R4 stays out on the second argument above, which the new counts do
 not touch: uncapped liability appears in these contracts as a carve-out from an R1 cap, so the two
-rules mark overlapping text and cannot be read separately, and it was one of the compound rules.
+rules mark overlapping text and cannot be read separately.
+
+Being compound is **not** a reason to single R4 out, and should not be cited as one: R2 and R6 were
+also to be asked as sub-questions and both survive. Dropping R4 removed a third of the sub-question
+work, which is a consequence of the decision, not a ground for it. Independence is the only argument
+that distinguishes R4 from the rules that stayed.
 
 **The first argument must not be repeated.** "The only rule failing the gate" is now false, and
 calling it that in the report would be a measured claim contradicted by the data. The report prints

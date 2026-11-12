@@ -11,14 +11,14 @@ import pytest
 from jev_cascade import config
 from jev_cascade.corpus import (
     GATE_MIN_DOCUMENTS,
-    GATE_MIN_SPANS,
+    GATE_MIN_HIGHLIGHTS,
     corpus_facts,
     filter_counts,
     gate_counts,
     join_key,
     load_corpus,
 )
-from jev_cascade.rulebook import RULEBOOK, Rule, rule
+from jev_cascade.rulebook import RULEBOOK, SUPERSEDED_GATE_COUNTS, Rule, rule
 
 pytestmark = pytest.mark.skipif(
     not config.cuad_is_available(),
@@ -44,11 +44,8 @@ def test_the_join_key_matches_pacira_across_its_ampersand():
 
 def test_the_three_filters_give_three_different_counts():
     # Asserted so the difference between the 53, the 44 and the 44 stays documented.
-    assert filter_counts() == {
-        "csv_document_name": 53,
-        "csv_filename": 44,
-        "json_title": 44,
-    }
+    counts = filter_counts()
+    assert (counts.csv_document_name, counts.csv_filename, counts.json_title) == (53, 44, 44)
 
 
 def test_the_corpus_loads_exactly_53_documents_including_pacira():
@@ -96,16 +93,31 @@ def test_an_impossible_document_category_carries_zero_answers_in_cuad_itself():
     assert (pairs, impossible) == (20910, 14208)
 
 
-def test_the_loader_exposes_the_certified_negative_documents_of_each_rule():
-    counts = {c.rule_id: c for c in gate_counts()}
-    documents = {d.doc_id: d for d in load_corpus()}
-    for rule_ in RULEBOOK:
-        ids = counts[rule_.id].certified_negative_doc_ids
-        assert len(ids) == counts[rule_.id].certified_negative_documents
-        assert set(ids) <= set(documents)
-        for doc_id in ids:
-            assert documents[doc_id].is_certified_negative(rule_.id)
-            assert documents[doc_id].highlights_for(rule_.id) == ()
+def test_the_loader_exposes_the_same_certified_negative_documents_cuad_flags():
+    # Checked against the raw records rather than against the loader's own view of them: the
+    # expected set is read straight out of `is_impossible` in the JSON, so a loader that dropped
+    # or invented one would disagree. Going through `is_certified_negative` instead would only
+    # re-run the filter that built the list.
+    with config.cuad_json().open(encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    license_titles = {d.doc_id for d in load_corpus()}
+    expected: dict[str, set[str]] = {rule_.id: set() for rule_ in RULEBOOK}
+    category_to_rule = {rule_.cuad_category: rule_.id for rule_ in RULEBOOK}
+    for record in payload["data"]:
+        if record["title"] not in license_titles:
+            continue
+        for qa in record["paragraphs"][0]["qas"]:
+            category = qa["id"].split("__", 1)[-1]
+            rule_id = category_to_rule.get(category)
+            if rule_id is not None and qa.get("is_impossible"):
+                expected[rule_id].add(record["title"])
+
+    exposed = {c.rule_id: set(c.certified_negative_doc_ids) for c in gate_counts()}
+    assert exposed == expected
+    # And the lists are lists, not accidentally deduplicated views.
+    for count in gate_counts():
+        assert len(count.certified_negative_doc_ids) == len(set(count.certified_negative_doc_ids))
 
 
 def test_the_tracer_documents_give_non_empty_recall_denominators():
@@ -138,18 +150,20 @@ def test_the_gate_counts_match_the_measured_per_rule_table():
     }
     counts = gate_counts()
     measured = {
-        c.rule_id: (c.documents_with_spans, c.spans, c.certified_negative_documents)
+        c.rule_id: (c.documents_with_highlights, c.highlights, c.certified_negative_documents)
         for c in counts
     }
     assert measured == expected
-    assert sum(c.spans for c in counts) == 429
+    assert sum(c.highlights for c in counts) == 429
 
 
 def test_every_rule_accounts_for_all_53_documents():
-    # Each document either holds a span for a Rule or is certified as having none: no third state.
-    # Without this, a category missing from a document's annotations would pass unnoticed.
+    # Each document either holds a Highlight for a Rule or is certified as having none: no third
+    # state. Without this, a category missing from a document's annotations would pass unnoticed.
     for count in gate_counts():
-        assert count.documents_with_spans + count.certified_negative_documents == 53, count.rule_id
+        assert (
+            count.documents_with_highlights + count.certified_negative_documents == 53
+        ), count.rule_id
 
 
 def test_the_corpus_facts_match_the_measured_corpus_size():
@@ -157,7 +171,7 @@ def test_the_corpus_facts_match_the_measured_corpus_size():
     # From `docs/cuad-ground-truth.md`: the 53 contexts hold 2,990,822 characters, of which
     # Pacira is 145,168 — the 2,845,654 recorded before it joined.
     assert (facts.documents, facts.characters) == (53, 2990822)
-    assert facts.spans == 429
+    assert facts.highlights == 429
     assert facts.gate_passes
 
 
@@ -167,9 +181,18 @@ def test_the_dropped_rule_now_passes_the_gate_and_is_still_absent():
     # gate, so the standing reason is independence from R1 and the counts must say so.
     (dropped,) = corpus_facts().dropped
     assert dropped.rule_id == "R4"
-    assert (dropped.documents_with_spans, dropped.spans) == (17, 26)
+    assert (dropped.documents_with_highlights, dropped.highlights) == (17, 26)
     assert dropped.certified_negative_documents == 36
     assert dropped.passes_gate
+    assert dropped.highlight_margin == 1
+    # ADR-0005's superseded figures are kept as data so the report prints them without the
+    # renderer holding a number of its own.
+    assert (SUPERSEDED_GATE_COUNTS["R4"].documents, SUPERSEDED_GATE_COUNTS["R4"].highlights) == (
+        16,
+        23,
+    )
+    # The dropped Rule carries no Detection Question: wording is drafted only for Rules asked.
+    assert dropped.cuad_category == "Uncapped Liability"
     # Dropped means never asked.
     assert "R4" not in [r.id for r in RULEBOOK]
     with pytest.raises(KeyError, match="dropped in ADR-0005"):
@@ -180,17 +203,26 @@ def test_the_backup_rules_counts_stay_recorded():
     # Neither backup is needed, but the counts are what proves that: the report says the gate was
     # settled without reaching for them.
     backups = (
-        Rule("AR", "Audit Rights", "unused"),
-        Rule("IP", "Ip Ownership Assignment", "unused"),
+        Rule("AR", "Audit Rights", ""),
+        Rule("IP", "Ip Ownership Assignment", ""),
     )
-    counts = {c.rule_id: (c.documents_with_spans, c.spans) for c in gate_counts(rules=backups)}
+    counts = {
+        c.rule_id: (c.documents_with_highlights, c.highlights) for c in gate_counts(rules=backups)
+    }
     assert counts == {"AR": (29, 92), "IP": (17, 52)}
 
 
 def test_all_seven_rules_pass_the_gate():
+    # The gate's thresholds are written out rather than imported, so a Rule that only passes
+    # because someone lowered `GATE_MIN_*` fails here. ADR-0005: at least 15 documents with a
+    # Highlight and at least 25 Highlights.
     counts = gate_counts()
     assert [c.rule_id for c in counts] == ["R1", "R2", "R3", "R5", "R6", "R7", "R8"]
     for count in counts:
-        assert count.documents_with_spans >= GATE_MIN_DOCUMENTS, count.rule_id
-        assert count.spans >= GATE_MIN_SPANS, count.rule_id
+        assert count.documents_with_highlights >= 15, count.rule_id
+        assert count.highlights >= 25, count.rule_id
         assert count.passes_gate, count.rule_id
+
+
+def test_the_gate_thresholds_are_the_ones_adr_0005_set():
+    assert (GATE_MIN_DOCUMENTS, GATE_MIN_HIGHLIGHTS) == (15, 25)

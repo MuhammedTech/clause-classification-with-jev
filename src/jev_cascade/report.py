@@ -12,14 +12,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
-from .corpus import CORPUS_DOCUMENTS, GATE_MIN_DOCUMENTS, GATE_MIN_SPANS, CorpusFacts
+from .corpus import GATE_MIN_DOCUMENTS, GATE_MIN_HIGHLIGHTS, CorpusFacts, RuleCounts
 from .evaluator import RuleMetrics
 from .rulebook import (
     DROPPED_REASONS,
     QUESTION_TYPE,
     REPLACED_RULES,
     RULEBOOK,
+    SUPERSEDED_GATE_COUNTS,
     Rule,
+    rule as lookup_rule,
 )
 from .runner import RunStats
 
@@ -57,33 +59,72 @@ def _count_pair(numerator: int, denominator: int) -> str:
 
 
 def _corpus_section(corpus: CorpusFacts) -> list[str]:
-    """How the 53 documents were chosen, and the join one of them needs."""
-    counts = corpus.filter_counts
+    """How the corpus was chosen, and the join one of its documents needs."""
+    filters = corpus.filters
     return [
         "## Corpus",
         "",
-        f"The **License Agreement Set** is the {counts['csv_document_name']} rows of "
+        f"The **License Agreement Set** is the {filters.csv_document_name} rows of "
         '`master_clauses.csv` whose `Document Name` contains "licen". Two other filters give a '
         "different set and are not the one used, which is why earlier notes disagree on the size:",
         "",
         "| Filter | Documents |",
         "| --- | --- |",
-        f'| CSV `Document Name` contains "licen" | {counts["csv_document_name"]} |',
-        f'| CSV `Filename` contains "licen" | {counts["csv_filename"]} |',
-        f'| JSON `title` contains "licen" | {counts["json_title"]} |',
+        f'| CSV `Document Name` contains "licen" | {filters.csv_document_name} |',
+        f'| CSV `Filename` contains "licen" | {filters.csv_filename} |',
+        f'| JSON `title` contains "licen" | {filters.json_title} |',
         "",
         "The JSON carries no `Document Name` field, so each CSV row is joined to `CUAD_v1.json` by "
         "comparing `Filename` against the JSON `title`: the `.pdf` / `.txt` extension stripped, "
         "then compared on **alphanumerics only, lowercased**. With that normalisation all "
-        f"{counts['csv_document_name']} resolve. Without it exactly one fails — PACIRA "
+        f"{filters.csv_document_name} resolve. Without it exactly one fails — PACIRA "
         "PHARMACEUTICALS, whose filename says `A&R` where the title says `A_R`.",
         "",
         f"Graded text is the JSON `context`, the same string the Highlight offsets are measured "
         f"against: **{corpus.documents} documents**, {corpus.characters:,} characters, "
-        f"{corpus.spans} Highlights across the seven Rules. Every one of those offsets lands "
-        "exactly on its answer text, so character-range overlap is a sound label (ADR-0004).",
+        f"{corpus.highlights} Highlights across the seven Rules. Every one of those offsets lands "
+        "exactly on the text it marks, so character-range overlap is a sound label (ADR-0004).",
         "",
     ]
+
+
+def _margin_phrase(count: RuleCounts) -> str:
+    """How far a Rule clears the gate's Highlight minimum, when that is worth saying."""
+    margin = count.highlight_margin
+    if not count.passes_gate or margin > 2:
+        return ""
+    return " by one Highlight" if margin == 1 else f" by {margin} Highlights"
+
+
+def _dropped_rule_paragraph(count: RuleCounts, corpus_documents: int) -> list[str]:
+    """One dropped Rule: what it measures now, what ADR-0005 recorded, and why it stays out.
+
+    Both figures come from data — the live count from CUAD, the old one from
+    `SUPERSEDED_GATE_COUNTS` — so this paragraph states no number of its own.
+    """
+    was = SUPERSEDED_GATE_COUNTS.get(count.rule_id)
+    reason = DROPPED_REASONS.get(count.rule_id, "")
+
+    lines = [
+        f"**Dropped: {count.cuad_category} ({count.rule_id}).** It is absent from the Rulebook and "
+        f"never asked, and it has no Detection Question: wording is drafted only for Rules that "
+        f"are asked. Over all {corpus_documents} documents it measures "
+        f"**{count.documents_with_highlights} documents and {count.highlights} Highlights**, "
+        f"which {'passes' if count.passes_gate else 'fails'} the gate{_margin_phrase(count)}."
+    ]
+    if was is not None:
+        lines.append("")
+        lines.append(
+            f"ADR-0005 recorded {was.documents} documents and {was.highlights} Highlights and "
+            f"dropped it partly for failing the gate. That measurement is superseded — "
+            f"{was.why_it_changed} — so **the gate is not a reason to drop this Rule**, and the "
+            f"report does not give it as one."
+        )
+    if reason:
+        lines.append("")
+        lines.append(f"It stays dropped on the ground that survives the correction. {reason}")
+    lines.append("")
+    return lines
 
 
 def _rulebook_section(corpus: CorpusFacts) -> list[str]:
@@ -93,22 +134,23 @@ def _rulebook_section(corpus: CorpusFacts) -> list[str]:
         "",
         "Seven Rules, each mapped to one CUAD category and asked as one positively phrased "
         "Detection Question (ADR-0005). The **gate** asks for at least "
-        f"{GATE_MIN_DOCUMENTS} documents carrying a span and at least {GATE_MIN_SPANS} spans; "
-        "below either, the denominators are too thin to read a curve off.",
+        f"{GATE_MIN_DOCUMENTS} documents carrying a Highlight and at least "
+        f"{GATE_MIN_HIGHLIGHTS} Highlights; below either, the denominators are too thin to read a "
+        "curve off.",
         "",
-        "These counts come from **CUAD** annotations rather than from the Splitter, so they do not "
-        f"move when the partition changes. The gate is therefore settled once, over all "
-        f"{CORPUS_DOCUMENTS} documents at corpus-loading time, and is never re-checked after a "
+        "These counts come from CUAD's own annotations and **not from the Splitter**, so they do "
+        "not move when the partition changes. The gate is therefore settled once, over all "
+        f"{corpus.documents} documents at corpus-loading time, and is never re-checked after a "
         "run.",
         "",
-        "| Rule | CUAD category | Documents with a span | Spans | Certified Negative documents | "
-        "Gate |",
+        "| Rule | CUAD category | Documents with a Highlight | Highlights | "
+        "Certified Negative documents | Gate |",
         "| --- | --- | --- | --- | --- | --- |",
     ]
     for count in corpus.gate:
         lines.append(
-            f"| {count.rule_id} | {count.cuad_category} | {count.documents_with_spans} | "
-            f"{count.spans} | {count.certified_negative_documents} | "
+            f"| {count.rule_id} | {count.cuad_category} | {count.documents_with_highlights} | "
+            f"{count.highlights} | {count.certified_negative_documents} | "
             f"{'pass' if count.passes_gate else 'FAIL'} |"
         )
     lines.append("")
@@ -128,22 +170,10 @@ def _rulebook_section(corpus: CorpusFacts) -> list[str]:
     lines.append("")
 
     for count in corpus.dropped:
-        reason = DROPPED_REASONS.get(count.rule_id, "")
-        lines.append(
-            f"**Dropped: {count.cuad_category} ({count.rule_id}).** It is absent from the Rulebook "
-            f"and never asked. ADR-0005 dropped it as the Rule failing the gate, at 16 documents "
-            f"and 23 spans — but that was measured before Pacira joined the corpus. Over all "
-            f"{CORPUS_DOCUMENTS} documents it measures **{count.documents_with_spans} documents "
-            f"and {count.spans} spans**, which "
-            f"{'passes' if count.passes_gate else 'still fails'} the gate"
-            f"{' by one span' if count.passes_gate and count.spans == GATE_MIN_SPANS + 1 else ''}. "
-            f"It stays dropped on the other ground ADR-0005 gives. {reason}"
-        )
-        lines.append("")
+        lines.extend(_dropped_rule_paragraph(count, corpus.documents))
 
-    category = {rule.id: rule.cuad_category for rule in RULEBOOK}
     replaced = ", ".join(
-        f"{rule_id} ({category[rule_id]}) replaced {former}"
+        f"{rule_id} ({lookup_rule(rule_id).cuad_category}) replaced {former}"
         for rule_id, former in REPLACED_RULES.items()
     )
     lines.append(

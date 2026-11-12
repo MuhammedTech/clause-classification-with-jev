@@ -1,14 +1,14 @@
 """The Rulebook: seven Rules, one positively phrased Detection Question each (ADR-0005).
 
 The numbering keeps the gap at R4 so these ids stay comparable with the earlier notes. Uncapped
-Liability was R4 and is dropped **because it is not independent of R1** — it appears in these
-contracts as a carve-out from a cap, so the two Rules mark overlapping text — and because it was one
-of the compound Rules.
+Liability was R4 and is dropped **because it is not independent of R1**: it appears in these
+contracts as a carve-out from a cap, so the two Rules mark overlapping text. That is the only
+argument that distinguishes it — R2 and R6 were compound Rules too and both survive.
 
 It is *not* dropped for failing the gate. ADR-0005 said it was the only Rule to fail, at 16
-documents and 23 spans, but that was measured before Pacira joined the corpus. On all 53 documents
-it measures **17 documents and 26 spans** and passes the gate by one span. See the correction note
-in ADR-0005.
+documents and 23 Highlights, but that was measured before Pacira joined the corpus. On all 53
+documents it measures **17 documents and 26 Highlights** and passes the gate by one. See the
+correction note in ADR-0005. (CUAD's own files call a Highlight a span; `GLOSSARY.md` does not.)
 
 R5 and R8 changed meaning from the original notes — Exclusivity replaced Non-Compete and
 Anti-Assignment replaced Volume Restriction — so their results must not be compared to the old
@@ -66,18 +66,48 @@ RULEBOOK: tuple[Rule, ...] = (
 )
 
 #: The Rules that were considered and dropped, kept here so the report can print their measured
-#: counts rather than a remembered reason. They are never asked: they are not in `RULEBOOK`.
-DROPPED_RULES: tuple[Rule, ...] = (
-    Rule("R4", "Uncapped Liability", "Does this clause leave a party's liability uncapped?"),
-)
+#: counts rather than a remembered reason. They are never asked: they are not in `RULEBOOK`, and
+#: they carry no Detection Question, because ADR-0005 drafts wording only for Rules that are asked
+#: and all wording needs the user's review in ticket 08.
+DROPPED_RULES: tuple[Rule, ...] = (Rule("R4", "Uncapped Liability", ""),)
 
 #: Why each dropped Rule is out, for the report. Independence, not the gate — see the module
 #: docstring and the correction note in ADR-0005.
+#:
+#: Being compound is deliberately absent: R2 and R6 were also to be asked as sub-questions and both
+#: survive, so it does not distinguish R4 from the Rules that stayed. Independence is the only
+#: argument that does.
 DROPPED_REASONS: dict[str, str] = {
     "R4": (
         "It is not independent of R1 — uncapped liability appears in these contracts as a "
         "carve-out from a cap, so the two Rules mark overlapping text and cannot be read "
-        "separately. It was also one of the compound Rules, whose sub-questions ADR-0005 drops."
+        "separately."
+    ),
+}
+
+
+@dataclass(frozen=True)
+class SupersededCounts:
+    """A gate count ADR-0005 recorded that a later measurement corrected.
+
+    Kept as data so the report can print the old figure beside the new one without the renderer
+    carrying a number of its own, and so correcting it again means editing one place.
+    """
+
+    documents: int
+    highlights: int
+    why_it_changed: str
+
+
+#: What ADR-0005 recorded for each dropped Rule, and why that measurement no longer stands.
+SUPERSEDED_GATE_COUNTS: dict[str, SupersededCounts] = {
+    "R4": SupersededCounts(
+        documents=16,
+        highlights=23,
+        why_it_changed=(
+            "measured before Pacira joined the corpus, which carries 3 Uncapped Liability "
+            "Highlights by itself"
+        ),
     ),
 }
 
@@ -97,7 +127,8 @@ def rule(rule_id: str) -> Rule:
     except KeyError:
         if rule_id in DROPPED_REASONS:
             raise KeyError(
-                f"{rule_id} was dropped in ADR-0005: {DROPPED_REASONS[rule_id]} It passes the "
-                "gate on the full 53 documents, at 17 documents and 26 spans"
+                f"{rule_id} was dropped in ADR-0005: {DROPPED_REASONS[rule_id]} It is not out for "
+                "failing the gate, which it passes on the full corpus; see the correction note in "
+                "ADR-0005 and the counts the report prints"
             ) from None
         raise KeyError(f"Unknown rule {rule_id}; the Rulebook holds {sorted(_BY_ID)}") from None

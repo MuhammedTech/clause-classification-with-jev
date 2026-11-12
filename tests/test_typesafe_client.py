@@ -145,6 +145,29 @@ def test_a_dropped_connection_is_retried():
     assert len(transport.requests) == 3
 
 
+def test_a_truncated_reply_is_retried():
+    import http.client
+
+    class Truncated:
+        """A 200 whose body is cut off, then a body that is not JSON, then a good one."""
+
+        def __init__(self):
+            self.calls = 0
+
+        def __call__(self, url, headers, body, timeout):
+            self.calls += 1
+            if self.calls == 1:
+                raise http.client.IncompleteRead(b"{")
+            if self.calls == 2:
+                return 200, b'{"model": "jev-1.14'
+            return 200, json.dumps(ok(0.7)[1]).encode()
+
+    transport = Truncated()
+
+    assert ask(client(transport)) == 0.7
+    assert transport.calls == 3
+
+
 def test_it_gives_up_after_the_retry_budget_and_says_so():
     transport = FakeTransport((429, {}))
 

@@ -3,9 +3,9 @@
 Jev is called once per (Clause, Rule), never with two questions in one call. Jev sees the Parent
 Line plus the Clause text; grading uses only the Clause's own span.
 
-This module holds the interface and a deterministic seeded stub. The real HTTP client arrives in
-ticket 07, once the user supplies the key; everything runs on the stub until then, and every figure
-derived from it is labelled as stub in the report.
+This module holds the interface, a deterministic seeded stub and the test wrappers. The real HTTP
+client is in `typesafe.py`, and `clients.py` chooses between the two. Every figure derived from the
+stub is labelled as stub in the report.
 """
 
 from __future__ import annotations

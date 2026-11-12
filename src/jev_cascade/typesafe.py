@@ -15,6 +15,7 @@ transport is stdlib `urllib`: no new dependency.
 
 from __future__ import annotations
 
+import http.client
 import json
 import time
 import urllib.error
@@ -29,6 +30,13 @@ API_KEY_ENV = "JEV_API_KEY"
 
 #: What the client sends for each question type the runner can ask. Ticket 08 adds the others.
 _QUESTION_TYPES = {"binary": "noul"}
+
+#: The id the one question goes under in the request, and is read back from in the reply.
+_QUESTION_ID = "q"
+
+#: Statuses worth another try: request timeout, rate limited (429), and server errors including the
+#: vendor's 529 "overloaded".
+_RETRYABLE_STATUSES = {408, 429}
 
 #: `transport(url, headers, body, timeout) -> (status, body)`. It raises `OSError` when the
 #: connection fails or times out, and returns any HTTP status, error statuses included.
@@ -120,7 +128,7 @@ class TypeSafeJevClient:
             {
                 "model": self.model,
                 "state": state,
-                "questions": {"q": {"type": jev_type, "instructions": question}},
+                "questions": {_QUESTION_ID: {"type": jev_type, "instructions": question}},
             },
             ensure_ascii=False,
         ).encode("utf-8")
@@ -135,7 +143,7 @@ class TypeSafeJevClient:
                 f"asked {self.model!r} but the reply came from {reply.get('model')!r}"
             )
         try:
-            return float(reply["answers"]["q"]["noul"])
+            return float(reply["answers"][_QUESTION_ID]["noul"])
         except (KeyError, TypeError, ValueError) as error:
             raise JevError(f"unexpected reply shape from Jev: {str(reply)[:200]}") from error
 
@@ -157,17 +165,19 @@ class TypeSafeJevClient:
             self._pace()
             try:
                 status, payload = self.transport(self.endpoint, headers, body, self.timeout)
-            except OSError as error:  # includes timeouts and dropped connections
-                last = f"connection failed: {error}"
+            except (OSError, http.client.HTTPException) as error:
+                # Timeouts, dropped connections and a body cut off mid-read.
+                last = f"connection failed: {error!r}"
                 continue
 
             if status == 200:
                 try:
                     return json.loads(payload)
-                except json.JSONDecodeError as error:
-                    raise JevError("Jev replied 200 with a body that is not JSON") from error
+                except ValueError:  # a cut-off body: JSON or UTF-8 decoding failed
+                    last = "HTTP 200 with a body that is not JSON"
+                    continue
             text = payload.decode("utf-8", errors="replace")[:200]
-            if status == 429 or status >= 500 or status == 408:
+            if status in _RETRYABLE_STATUSES or status >= 500:
                 last = f"HTTP {status}"
                 continue
             if status == 401:

@@ -69,3 +69,18 @@ every cache row `jev-1.14.0`, no stub label in the report. A second run made 0 c
 the "about 20 minutes" the rate limit alone would give. Reaching 20 minutes needs concurrent calls
 in the runner (about 20 in flight), which this ticket did not add; it is a runner change, not a
 client one. The cost is unchanged (roughly $0.27). Raised for the user to decide before the real run.
+
+**Code review (Standards and Spec).** No hard violations on either axis; the spec is met and both
+deviations (pinned model, `binary` only) were judged sound. Fixed: a truncated reply
+(`IncompleteRead`) and a 200 with a cut-off body are now retried instead of aborting the run; the
+question id is a named constant and the retryable statuses are one set; the stale `jev.py` docstring
+says the real client exists; the over-long CLI error is wrapped and the imports are in order.
+
+Left alone, as judgement calls: the two context-limit constants are read by nothing (the ticket asks
+only to record the limit, and a Clause is far under it, so a length pre-check would be speculative);
+`Sourced.value` is widened to `float | str` for the model and endpoint rather than adding a second
+type; the empty-key client built for `--from-cache` only lends its pinned model version; Jev errors
+live in `typesafe.py` while `JevCallRefused` stays in `jev.py`; backoff has no jitter or
+`Retry-After` (the transport returns no headers) and `_next_call_at` is not thread-safe, both of
+which matter only if ticket 09 adds concurrency. A `ContextTooLong` would abort a run, not skip a
+Clause, which cannot happen on this corpus.

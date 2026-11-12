@@ -8,8 +8,8 @@ from pathlib import Path
 from . import config
 from .clients import KINDS, build_client
 from .jev import JevCallRefused
-from .typesafe import JevError
 from .pipeline import DEFAULT_CUTOFF, DEFAULT_RULE_IDS, TRACER_DOC_IDS, run
+from .typesafe import JevError
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -101,7 +101,10 @@ def main(argv: list[str] | None = None) -> int:
             "Run once without --from-cache to fill it."
         )
     except JevError as error:
-        parser.error(f"Jev failed: {error}. Answers already received are in the cache, so the same command resumes.")
+        parser.error(
+            f"Jev failed: {error}. Answers already received are in the cache, so running the "
+            "same command again resumes."
+        )
 
     print(f"Wrote {result.report_path}")
     print(

@@ -160,3 +160,78 @@ def test_the_runner_reports_the_calls_it_made_and_the_time_it_took(tmp_path):
     _, again = run_pairs(clauses(), [R1], StubJevClient(), cache)
     assert again.calls_made == 0
     assert again.cache_hits == 3
+
+
+def _clause_under(parent_line):
+    return Clause("D", 0, 0, 10, "(b) report quarterly", parent_line)
+
+
+def test_the_same_span_under_a_different_parent_line_is_asked_again(tmp_path):
+    # Ticket 10. Jev is shown Parent Line plus Clause text, so two prompts that differ only in the
+    # Parent Line must not share a cached answer. Two sequential runs on one cache file, because
+    # the P(yes) table is keyed by (document, span) and cannot hold two answers for one span.
+    cache = tmp_path / "pyes.jsonl"
+    sibling = _clause_under("(a) pay the fees.")
+    section = _clause_under("2. Licensee commits to:")
+
+    first_client = CountingJevClient(StubJevClient())
+    first, _ = run_pairs([sibling], [R1], first_client, cache)
+    second_client = CountingJevClient(StubJevClient())
+    second, _ = run_pairs([section], [R1], second_client, cache)
+
+    assert first_client.calls == 1
+    assert second_client.calls == 1
+    assert first["R1"][sibling.key] != second["R1"][section.key]
+
+
+def test_a_cache_row_without_a_fingerprint_is_a_miss(tmp_path):
+    # A cache written before the fingerprint existed cannot say what its prompt was, so the Pair is
+    # asked again rather than guessed at.
+    cache = tmp_path / "pyes.jsonl"
+    clause = _clause_under("2. Licensee commits to:")
+    run_pairs([clause], [R1], StubJevClient(), cache)
+    rows = [json.loads(line) for line in cache.read_text(encoding="utf-8").splitlines()]
+    for row in rows:
+        del row["prompt_fingerprint"]
+    cache.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    client = CountingJevClient(StubJevClient())
+    run_pairs([clause], [R1], client, cache)
+
+    assert client.calls == 1
+
+
+def test_a_cache_row_records_a_fingerprint_of_what_jev_was_shown(tmp_path):
+    cache = tmp_path / "pyes.jsonl"
+    run_pairs([_clause_under("A")], [R1], StubJevClient(), cache)
+    run_pairs([_clause_under("B")], [R1], StubJevClient(), cache)
+
+    rows = [json.loads(line) for line in cache.read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == 2
+    assert rows[0]["prompt_fingerprint"] != rows[1]["prompt_fingerprint"]
+
+
+def test_text_cannot_shift_across_the_parent_line_boundary():
+    # "ab" + "c" and "a" + "bc" are different prompts and must not collide.
+    from jev_cascade.runner import prompt_fingerprint
+
+    assert prompt_fingerprint("ab", "c") != prompt_fingerprint("a", "bc")
+
+
+class RecordingClient:
+    is_stub = True
+    model_version = "recording"
+
+    def __init__(self):
+        self.seen = []
+
+    def p_yes(self, clause_text, parent_line, question, question_type):
+        self.seen.append((parent_line, clause_text))
+        return 0.5
+
+
+def test_jev_receives_the_parent_line_and_the_clause_text(tmp_path):
+    clause = _clause_under("2. Licensee commits to:")
+    client = RecordingClient()
+    run_pairs([clause], [R1], client, tmp_path / "pyes.jsonl")
+    assert client.seen == [("2. Licensee commits to:", "(b) report quarterly")]

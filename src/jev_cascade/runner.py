@@ -1,16 +1,31 @@
 """The Jev runner: asks every (Clause, Rule) Pair once and caches every P(yes).
 
-The cache is a JSONL file keyed by document, Clause, Rule, question type and model version. Answers
-are appended and flushed per call, so a run interrupted midway keeps everything it had already
-learned and the next run asks only the Pairs still missing.
+The cache is a JSONL file. A row's key identifies **everything the client was shown and asked**:
 
-The question wording is stored on each row but is deliberately not part of the key, which is the
-key the spec fixes. Ticket 08 reviews the wording; storing it is what makes a cache written under
-older wording detectable then.
+- the document and the Clause span, which is what the Evaluator grades on and keeps a row readable;
+- the Rule, the question type and the model version;
+- a **prompt fingerprint**, a hash of the Parent Line and the Clause text.
+
+The Parent Line has to be in the key because Jev is shown Parent Line plus Clause text, and the
+Parent Line is a function of how the document is cut, not of the span. Two prompts that differ only
+in their Parent Line share a span, so without the fingerprint the second would be served the first's
+P(yes) silently, and a real client is billed per call (ticket 10). The Clause text is implied by the
+document and the span, but it is hashed too, so a re-extracted `context` or a different whitespace
+normalisation cannot quietly reuse answers either.
+
+A row written before the fingerprint existed has none, and is a **miss**: the Pair is asked again
+rather than guessed at.
+
+Answers are appended and flushed per call, so a run interrupted midway keeps everything it had
+already learned and the next run asks only the Pairs still missing.
+
+The question wording is stored on each row but is deliberately not part of the key. Ticket 08
+reviews the wording; storing it is what makes a cache written under older wording detectable then.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -21,8 +36,9 @@ from .domain import Clause
 from .jev import JevClient
 from .rulebook import QUESTION_TYPE, Rule
 
-#: A cached answer is identified by document, Clause span, Rule, question type and model version.
-PairKey = tuple[str, int, int, str, str, str]
+#: A cached answer is identified by document, Clause span, Rule, question type, model version and
+#: the fingerprint of what Jev was shown. See the module docstring.
+PairKey = tuple[str, int, int, str, str, str, str]
 
 #: P(yes) by Rule id, then by Clause key (document plus span).
 PYesTable = dict[str, dict[tuple[str, str], float]]
@@ -38,6 +54,16 @@ class RunStats:
     seconds: float
 
 
+def prompt_fingerprint(parent_line: str, clause_text: str) -> str:
+    """A hash of the two pieces of text Jev is shown, Parent Line first.
+
+    Joined with a unit separator so text cannot shift across the boundary: `("ab", "c")` and
+    `("a", "bc")` are different prompts.
+    """
+    payload = "\x1f".join([parent_line, clause_text])
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
 def _key(clause: Clause, rule: Rule, model_version: str) -> PairKey:
     return (
         clause.doc_id,
@@ -46,6 +72,7 @@ def _key(clause: Clause, rule: Rule, model_version: str) -> PairKey:
         rule.id,
         QUESTION_TYPE,
         model_version,
+        prompt_fingerprint(clause.parent_line, clause.text),
     )
 
 
@@ -53,7 +80,7 @@ def read_cache(path: Path) -> dict[PairKey, float]:
     """Load every answer already on disk.
 
     A truncated or malformed final line is skipped rather than fatal: an interruption can leave one
-    half-written.
+    half-written. A row with no `prompt_fingerprint` is skipped too, so it is a miss (ticket 10).
     """
     answers: dict[PairKey, float] = {}
     if not Path(path).exists():
@@ -73,10 +100,12 @@ def read_cache(path: Path) -> dict[PairKey, float]:
                     row["rule_id"],
                     row["question_type"],
                     row["model_version"],
+                    row["prompt_fingerprint"],
                 )
                 answers[key] = float(row["p_yes"])
             except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-                # A half-written line from an interrupted run. The Pair is simply asked again.
+                # A half-written line, or one written before the fingerprint existed. Either way
+                # the Pair is simply asked again.
                 continue
     return answers
 
@@ -148,6 +177,7 @@ def run_pairs(
                             "rule_id": rule.id,
                             "question_type": QUESTION_TYPE,
                             "model_version": model_version,
+                            "prompt_fingerprint": key[-1],
                             "question": rule.detection_question,
                             "p_yes": p_yes,
                         },

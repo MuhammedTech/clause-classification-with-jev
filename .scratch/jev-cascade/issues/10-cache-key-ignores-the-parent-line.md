@@ -29,15 +29,15 @@ whitespace normalisation — cannot quietly reuse answers either.
 
 **Blocked by:** None. Ticket 03 fixes it in passing, because 03 cannot be correct while it stands.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A runner test shows two Clauses with the same document, span, Rule, question type and model
+- [x] A runner test shows two Clauses with the same document, span, Rule, question type and model
       version but **different Parent Lines** get two client calls and two different P(yes) values.
-- [ ] A runner test shows a cache row written without the fingerprint is treated as a miss, not as a
+- [x] A runner test shows a cache row written without the fingerprint is treated as a miss, not as a
       hit, and the Pair is asked again.
-- [ ] The existing guarantees still hold: a second run makes zero client calls, and a run interrupted
+- [x] The existing guarantees still hold: a second run makes zero client calls, and a run interrupted
       midway resumes from the cache.
-- [ ] The cache docstring states what the key identifies and why the Parent Line is part of it.
+- [x] The cache docstring states what the key identifies and why the Parent Line is part of it.
 
 ## Comments
 
@@ -49,3 +49,9 @@ No measured result is contaminated. Everything so far has run on the stub, whose
 its inputs and carries no signal, and `out/` is gitignored and rebuildable. The defect is in ticket
 01's runner and predates ticket 03; it was harmless only because ticket 01's Parent Line rule made
 the line a function of the span.
+
+**2026-11-12, resolved.** `runner.py` now keys each answer on a `prompt_fingerprint`: a sha256 of the
+Parent Line and the Clause text joined with `\x1f`, truncated to 16 hex characters, stored on every
+row. A row without one is a miss. The different-Parent-Line test is two sequential runs on one cache
+file, because the P(yes) table is keyed by (document, span) and cannot hold two answers for one span.
+An existing `out/pyes.jsonl` is therefore ignored and rebuilt, which costs nothing on the stub.

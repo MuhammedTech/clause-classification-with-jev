@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from . import config
-from .jev import StubJevClient
+from .jev import CacheOnlyJevClient, JevCallRefused, StubJevClient
 from .pipeline import DEFAULT_CUTOFF, DEFAULT_RULE_IDS, TRACER_DOC_IDS, run
 
 
@@ -50,6 +50,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Seed for the stub Jev client. Default 0.",
     )
+    parser.add_argument(
+        "--from-cache",
+        action="store_true",
+        help=(
+            "Rebuild the report from the P(yes) cache alone. Jev is never asked: a Pair missing "
+            "from the cache is an error, not a call."
+        ),
+    )
     return parser
 
 
@@ -63,13 +71,23 @@ def main(argv: list[str] | None = None) -> int:
             "CUAD_DIR to where CUAD_v1.json and master_clauses.csv live."
         )
 
-    result = run(
-        client=StubJevClient(seed=args.seed),
-        doc_ids=tuple(args.doc_ids) if args.doc_ids else TRACER_DOC_IDS,
-        rule_ids=tuple(args.rule_ids) if args.rule_ids else DEFAULT_RULE_IDS,
-        cutoff=args.cutoff,
-        out_dir=args.out,
-    )
+    client = StubJevClient(seed=args.seed)
+    if args.from_cache:
+        client = CacheOnlyJevClient(client)
+
+    try:
+        result = run(
+            client=client,
+            doc_ids=tuple(args.doc_ids) if args.doc_ids else TRACER_DOC_IDS,
+            rule_ids=tuple(args.rule_ids) if args.rule_ids else DEFAULT_RULE_IDS,
+            cutoff=args.cutoff,
+            out_dir=args.out,
+        )
+    except JevCallRefused:
+        parser.error(
+            f"--from-cache: the cache in {args.out} does not hold every Pair this run needs. "
+            "Run once without --from-cache to fill it."
+        )
 
     print(f"Wrote {result.report_path}")
     print(

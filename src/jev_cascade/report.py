@@ -1,10 +1,13 @@
 """The Report: renders the Evaluator's output to Markdown, counts first.
 
-Ticket 01's report is one table for R1 at one fixed Cutoff. The Cutoff Curve, the charts and the
-full "How this is measured" sections arrive in ticket 05.
+The report opens with a per-Rule summary, then says how it is measured, describes the corpus, the
+Rulebook and the partition, and gives each Rule its fixed-Cutoff figures, its free saving and its
+Cutoff Curve with a chart. It closes with how to read the curve, what is not measured and the vendor
+caveats.
 
-Every figure here is stub-derived and labelled as such: the stub's P(yes) values are a hash of its
-inputs and carry no signal, so nothing in this report says anything about how Jev would behave.
+While Jev is the stub, every figure is labelled as stub-derived: the stub's P(yes) values are a
+hash of its inputs and carry no signal, so nothing in the report says anything about how Jev would
+behave.
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from .corpus import GATE_MIN_DOCUMENTS, GATE_MIN_HIGHLIGHTS, CorpusFacts, RuleCounts
-from .evaluator import FullyBinned, RuleMetrics
+from .evaluator import FreeSaving, FullyBinned, RuleMetrics
 from .partition import PartitionFacts
 from .rulebook import (
     DROPPED_REASONS,
@@ -37,12 +40,25 @@ class DocumentSummary:
 
 
 @dataclass(frozen=True)
+class RuleCurve:
+    """One Rule's Cutoff Curve and where its files were written, relative to the report."""
+
+    rule_id: str
+    #: One row per distinct observed P(yes), lowest first. The complete curve.
+    rows: tuple[RuleMetrics, ...]
+    saving: FreeSaving | None
+    chart: str
+    csv: str
+
+
+@dataclass(frozen=True)
 class ReportInputs:
     """Everything the report prints, so rendering stays a pure function of its inputs."""
 
     rules: Sequence[Rule]
     metrics: Sequence[RuleMetrics]
     fully_binned: FullyBinned
+    curves: Sequence[RuleCurve]
     stats: RunStats
     cutoff: float
     model_version: str
@@ -69,7 +85,9 @@ def _corpus_section(corpus: CorpusFacts) -> list[str]:
         "",
         f"The **License Agreement Set** is the {filters.csv_document_name} rows of "
         '`master_clauses.csv` whose `Document Name` contains "licen". Two other filters give a '
-        "different set and are not the one used, which is why earlier notes disagree on the size:",
+        "different set and are not the one used, which is why earlier notes disagree on the size. "
+        f"The {filters.csv_filename} and the {filters.json_title} each come from a different "
+        f"column, and neither is the {filters.csv_document_name}:",
         "",
         "| Filter | Documents |",
         "| --- | --- |",
@@ -245,12 +263,235 @@ def _partition_section(partition: PartitionFacts) -> list[str]:
     return lines
 
 
+#: How many rows of a curve the Markdown prints before it excerpts. The CSV always holds them all.
+CURVE_EXCERPT_ROWS = 25
+
+
+def _stub_label(inputs: ReportInputs) -> list[str]:
+    """The line that sits before every table of scored figures while Jev is the stub."""
+    if not inputs.is_stub:
+        return []
+    return [
+        "_Stub-derived: the stub's P(yes) values carry no signal, so these figures say nothing "
+        "about Jev._",
+        "",
+    ]
+
+
+def _summary_section(inputs: ReportInputs) -> list[str]:
+    """The opening: per Rule, counts first, then the free saving, then the one saving that is money."""
+    cutoff = inputs.cutoff
+    lines = [
+        "## Summary",
+        "",
+        "Per Rule, counts first. The headline is the lowest P(yes) Jev gave to any Clause holding a "
+        "Highlight, and the share of contract words that can be Binned strictly below it: the free "
+        "saving, because no Highlight is Lost there. It is read off the curve after seeing it, so it "
+        "is a headline and not a tuned Cutoff.",
+        "",
+    ]
+    lines.extend(_stub_label(inputs))
+    lines.extend(
+        [
+            "| Rule | Clauses holding a Highlight | Highlights | Lowest P(yes) of a holding Clause | "
+            "Words Binned below it | Binned Share below it |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for rule, curve in zip(inputs.rules, inputs.curves):
+        saving = curve.saving
+        if saving is None:
+            lines.append(f"| {rule.id} — {rule.cuad_category} | 0 | 0 | n/a | n/a | n/a |")
+            continue
+        metrics = saving.metrics
+        lines.append(
+            f"| {rule.id} — {rule.cuad_category} | "
+            f"{_count_pair(metrics.holding_clauses, saving.clauses)} Clauses | "
+            f"{metrics.highlights} | {saving.lowest_held_p_yes:g} | "
+            f"{_count_pair(saving.binned_words, saving.total_words)} words | "
+            f"{_format_share(saving.binned_share)} |"
+        )
+    lines.append("")
+
+    fully = inputs.fully_binned
+    asked = len(inputs.rules)
+    lines.append(
+        f"**Fully Binned Clauses** at the fixed Cutoff of {cutoff:g}: "
+        f"{_count_pair(fully.fully_binned_clauses, fully.clauses)} Clauses "
+        f"({_format_share(fully.clause_share)}) are Binned for every Rule asked in this run "
+        f"({asked} Rule{'s' if asked != 1 else ''}). It is the only saving that turns into money, "
+        "and the per-Rule Binned Share above does not combine into it."
+    )
+    lines.append("")
+    return lines
+
+
+def _how_measured_section() -> list[str]:
+    return [
+        "## How this is measured",
+        "",
+        "- **Highlights are the only ground truth.** A Highlight is a span of text a CUAD lawyer "
+        "marked as an instance of a category. No other model's opinion is used to grade anything.",
+        "- **A Clause holds a Highlight when their character ranges overlap by one character or "
+        "more.** No overlap threshold, no word minimum: the offsets are exact (ADR-0004).",
+        "- **Clause Recall against Provision Recall.** Clause Recall asks of the Clauses that hold a "
+        "Highlight how many are Escalated. Provision Recall asks of the Highlights how many have at "
+        "least one holding Clause Escalated. A Highlight that spans several Clauses is lost only "
+        "when all of them are Binned, so Provision Recall is never below Clause Recall.",
+        "- **Certified against Inferred Negatives.** A Clause holding nothing is a Certified "
+        "Negative when CUAD flags its document as having no such clause anywhere, and an Inferred "
+        "Negative when the document has Highlights for the Rule elsewhere. The false-alarm rate is "
+        "counted on Certified Negatives alone, since those are verified.",
+        "- **Binned Share is measured in words**, so it does not depend on where the Splitter cuts.",
+        "- **The Cutoff is swept, never chosen.** A Pair at or below it is Binned and above it "
+        "Escalated. The curve has one row at every P(yes) Jev actually gave, because the piles only "
+        "change when the Cutoff crosses one. Nothing is fitted, so nothing can overfit. Any single "
+        "figure quoted from the curve was picked after seeing it, and the report says so where it "
+        "quotes one.",
+        "",
+    ]
+
+
+def _curve_excerpt(rows: Sequence[RuleMetrics]) -> list[RuleMetrics]:
+    """Every row if the curve is short, else evenly spaced by position, first and last included.
+
+    Chosen by position and never by outcome, so the excerpt cannot flatter the curve.
+    """
+    if len(rows) <= CURVE_EXCERPT_ROWS:
+        return list(rows)
+    last = len(rows) - 1
+    positions = sorted({round(i * last / (CURVE_EXCERPT_ROWS - 1)) for i in range(CURVE_EXCERPT_ROWS)})
+    return [rows[i] for i in positions]
+
+
+def _curve_block(inputs: ReportInputs, curve: RuleCurve) -> list[str]:
+    """One Rule's free saving, the curve excerpt and the chart."""
+    lines: list[str] = []
+    saving = curve.saving
+    if saving is None:
+        lines.append(
+            "**Free saving.** No Clause holds a Highlight for this Rule in the documents scored, so "
+            "there is no score to stay below."
+        )
+    else:
+        lines.append(
+            f"**Free saving.** The lowest P(yes) Jev gave a Clause holding a Highlight is "
+            f"**{saving.lowest_held_p_yes:g}**. Strictly below it "
+            f"{saving.binned_clauses} of {saving.clauses} Clauses are Binned, which is "
+            f"{_count_pair(saving.binned_words, saving.total_words)} words "
+            f"(**{_format_share(saving.binned_share)}**), and {saving.lost_provisions} Highlights "
+            "are Lost. This was read off the curve after seeing it."
+        )
+    lines.append("")
+    lines.append(f"### {curve.rule_id} Cutoff Curve")
+    lines.append("")
+    excerpt = _curve_excerpt(curve.rows)
+    lines.append(
+        f"The complete curve has {len(curve.rows)} rows, one per distinct P(yes), in "
+        f"[`{curve.csv}`]({curve.csv}). This table shows {len(excerpt)} of them"
+        f"{', chosen by position' if len(excerpt) < len(curve.rows) else ''}."
+    )
+    lines.append("")
+    lines.extend(_stub_label(inputs))
+    lines.append(
+        "| Cutoff | Binned Clauses | Escalated Clauses | Clause Recall | Provision Recall | "
+        "Precision | Lost Provisions | Binned Share |"
+    )
+    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
+    for row in excerpt:
+        lines.append(
+            f"| {row.cutoff:g} | {row.binned_clauses} | {row.escalated_clauses} | "
+            f"{_count_pair(row.holding_escalated, row.holding_clauses)} "
+            f"({_format_share(row.clause_recall)}) | "
+            f"{_count_pair(row.highlights - row.lost_provisions, row.highlights)} "
+            f"({_format_share(row.provision_recall)}) | "
+            f"{_count_pair(row.holding_escalated, row.escalated_clauses)} "
+            f"({_format_share(row.precision)}) | "
+            f"{row.lost_provisions}/{row.highlights} | "
+            f"{_count_pair(row.binned_words, row.total_words)} words "
+            f"({_format_share(row.binned_share)}) |"
+        )
+    lines.append("")
+    lines.append(f"![{curve.rule_id} Cutoff Curve]({curve.chart})")
+    lines.append("")
+    return lines
+
+
+def _reading_section(inputs: ReportInputs) -> list[str]:
+    """The two ways to read the curve, each named, with Precision never passed off as accuracy."""
+    lines = [
+        "## Reading the curve",
+        "",
+        "The same curve is read two ways, and mixing them up is the commonest mistake.",
+        "",
+        "- **The classifier reading, around a Cutoff of 0.5.** Jev's P(yes) is treated as a yes/no "
+        "answer. Recall and Precision mean what they usually mean.",
+        "- **The cascade reading, at the low end.** The Cutoff sits just under the lowest P(yes) of "
+        "any holding Clause, so almost everything is Escalated and Precision is low by design. "
+        "Escalated here means Jev could not rule the Clause out, not that it detected anything. The "
+        "figure to read is Binned Share, the saving.",
+        "",
+        "**Quoting Precision at a low Cutoff as Jev's accuracy would be wrong.** At a base rate near "
+        "1%, Escalating every Clause already scores exactly the base rate, so a Precision in single "
+        "digits is what the arithmetic gives, not Jev failing.",
+        "",
+    ]
+    lines.extend(_stub_label(inputs))
+    lines.append(
+        "| Rule | Reading | Cutoff | Clause Recall | Provision Recall | Precision | Binned Share |"
+    )
+    lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+
+    def cells(m: RuleMetrics) -> str:
+        return (
+            f"{_count_pair(m.holding_escalated, m.holding_clauses)} "
+            f"({_format_share(m.clause_recall)}) | "
+            f"{_count_pair(m.highlights - m.lost_provisions, m.highlights)} "
+            f"({_format_share(m.provision_recall)}) | "
+            f"{_count_pair(m.holding_escalated, m.escalated_clauses)} "
+            f"({_format_share(m.precision)}) | "
+            f"{_count_pair(m.binned_words, m.total_words)} words ({_format_share(m.binned_share)})"
+        )
+
+    for metric, curve in zip(inputs.metrics, inputs.curves):
+        lines.append(f"| {metric.rule_id} | classifier reading | {metric.cutoff:g} | {cells(metric)} |")
+        saving = curve.saving
+        if saving is not None:
+            lines.append(
+                f"| {metric.rule_id} | cascade reading | just under {saving.lowest_held_p_yes:g} | "
+                f"{cells(saving.metrics)} |"
+            )
+    lines.append("")
+    lines.append(
+        "The classifier row is at the fixed Cutoff this run was given, which is not tuned. The "
+        "cascade row is at the point the curve itself marks, read after seeing it."
+    )
+    lines.append("")
+    return lines
+
+
+def _vendor_caveats_section() -> list[str]:
+    return [
+        "## Vendor caveats",
+        "",
+        "- TypeSafe's calibration evaluations of Jev were self-run: published by the vendor, not "
+        "reproduced by anyone else, and not checked here.",
+        "- TypeSafe documents a prompt-injection limitation. Jev reads the Clause inside its "
+        "question, so text in a Clause that reads like an instruction could in principle steer the "
+        "answer. This report does not test for it.",
+        "- Jev's probabilities depend on how the question is asked: the same question put as a "
+        "different question type has given very different probabilities elsewhere. The question "
+        "type and wording are settled in ticket 08, before the real run.",
+        "",
+    ]
+
+
 def render(inputs: ReportInputs) -> str:
     """Render the tracer-bullet report."""
     label = "stub" if inputs.is_stub else inputs.model_version
     lines: list[str] = []
 
-    lines.append("# Jev cascade: tracer bullet")
+    lines.append("# Jev cascade report")
     lines.append("")
     rule_names = ", ".join(r.id for r in inputs.rules)
     lines.append(
@@ -274,6 +515,8 @@ def render(inputs: ReportInputs) -> str:
         )
         lines.append("")
 
+    lines.extend(_summary_section(inputs))
+
     lines.append("## Run")
     lines.append("")
     lines.append("| | |")
@@ -290,6 +533,7 @@ def render(inputs: ReportInputs) -> str:
     lines.append(f"| Model version | {inputs.model_version} |")
     lines.append("")
 
+    lines.extend(_how_measured_section())
     lines.extend(_corpus_section(inputs.corpus))
     lines.extend(_rulebook_section(inputs.corpus))
     lines.extend(_partition_section(inputs.partition))
@@ -302,13 +546,14 @@ def render(inputs: ReportInputs) -> str:
         lines.append(f"| {document.doc_id} | {document.clauses} | {document.words} |")
     lines.append("")
 
-    for rule, metric in zip(inputs.rules, inputs.metrics):
+    for rule, metric, curve in zip(inputs.rules, inputs.metrics, inputs.curves):
         lines.append(f"## {rule.id} — {rule.cuad_category}")
         lines.append("")
         lines.append(f'Detection Question: _"{rule.detection_question}"_')
         lines.append("")
-        lines.append(f"At Cutoff {metric.cutoff:g}, counts first:")
+        lines.append(f"At the fixed Cutoff of {metric.cutoff:g}, counts first:")
         lines.append("")
+        lines.extend(_stub_label(inputs))
         lines.append("| Figure | Counts | Share |")
         lines.append("| --- | --- | --- |")
         lines.append(
@@ -356,6 +601,7 @@ def render(inputs: ReportInputs) -> str:
             "CUAD's explicit negatives alone with no Inferred Negative in it."
         )
         lines.append("")
+        lines.extend(_curve_block(inputs, curve))
 
     fully = inputs.fully_binned
     asked = len(inputs.rules)
@@ -367,6 +613,7 @@ def render(inputs: ReportInputs) -> str:
         "the only saving that turns into money: per-Rule Binned Share does not combine into it."
     )
     lines.append("")
+    lines.extend(_stub_label(inputs))
     lines.append("| Figure | Counts | Share |")
     lines.append("| --- | --- | --- |")
     lines.append(
@@ -378,6 +625,8 @@ def render(inputs: ReportInputs) -> str:
         f"words | {_format_share(fully.word_share)} |"
     )
     lines.append("")
+
+    lines.extend(_reading_section(inputs))
 
     lines.append("## What this does not measure")
     lines.append("")
@@ -391,8 +640,11 @@ def render(inputs: ReportInputs) -> str:
     lines.append("")
     lines.append(
         "Accuracy and ROC AUC are deliberately absent: at a ~1% base rate, answering no to "
-        "everything would score 99% accuracy (ADR-0003)."
+        "everything would score 99% accuracy, and ROC AUC flatters a rare problem the same way "
+        "(ADR-0003). Recall and Precision, with their counts, are reported instead."
     )
     lines.append("")
+
+    lines.extend(_vendor_caveats_section())
 
     return "\n".join(lines)

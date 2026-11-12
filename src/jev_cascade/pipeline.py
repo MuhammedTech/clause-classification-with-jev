@@ -14,14 +14,22 @@ from pathlib import Path
 from typing import Sequence
 
 from . import config
+from .charts import write_curve_chart, write_curve_csv
 from .corpus import corpus_facts, load_corpus
 from .domain import Clause, Highlight
-from .evaluator import FullyBinned, RuleMetrics, evaluate_rule, fully_binned
+from .evaluator import (
+    FullyBinned,
+    RuleMetrics,
+    cutoff_curve,
+    evaluate_rule,
+    free_saving,
+    fully_binned,
+)
 from .jev import JevClient, StubJevClient
 from .partition import partition_facts
-from .report import DocumentSummary, ReportInputs, render
+from .report import DocumentSummary, ReportInputs, RuleCurve, render
 from .rulebook import Rule, rule
-from .runner import RunStats, run_pairs
+from .runner import PYesTable, RunStats, run_pairs
 from .splitter import split_document
 
 #: The tracer documents: two with R1 Highlights, so the recall denominators are not empty, and one
@@ -50,9 +58,33 @@ class RunResult:
     markdown: str
     metrics: tuple[RuleMetrics, ...]
     fully_binned: FullyBinned
+    curves: tuple[RuleCurve, ...]
+    p_yes: PYesTable
     stats: RunStats
     clauses: tuple[Clause, ...]
     highlights: tuple[Highlight, ...]
+
+
+def _write_curve(
+    r: Rule,
+    clauses: Sequence[Clause],
+    highlights: Sequence[Highlight],
+    p_yes: dict,
+    certified_negative_docs: set[str],
+    out_dir: Path,
+    is_stub: bool,
+) -> RuleCurve:
+    """Sweep one Rule's Cutoff across every observed P(yes), and write its CSV and chart.
+
+    The paths are relative to the report, so the Markdown links work wherever `out_dir` is moved.
+    """
+    rows = cutoff_curve(r.id, clauses, highlights, p_yes, certified_negative_docs)
+    saving = free_saving(r.id, clauses, highlights, p_yes)
+    csv_path = f"curves/{r.id}.csv"
+    chart_path = f"charts/{r.id}-curve.png"
+    write_curve_csv(rows, out_dir / csv_path)
+    write_curve_chart(f"{r.id} {r.cuad_category}", rows, saving, out_dir / chart_path, is_stub)
+    return RuleCurve(rule_id=r.id, rows=rows, saving=saving, chart=chart_path, csv=csv_path)
 
 
 def run(
@@ -107,11 +139,25 @@ def run(
     )
     fully = fully_binned(clauses, table, cutoff)
 
+    curves = tuple(
+        _write_curve(
+            r,
+            clauses,
+            [h for h in highlights if h.rule_id == r.id],
+            table[r.id],
+            certified_by_rule[r.id],
+            out_dir,
+            client.is_stub,
+        )
+        for r in rules
+    )
+
     markdown = render(
         ReportInputs(
             rules=rules,
             metrics=metrics,
             fully_binned=fully,
+            curves=curves,
             stats=stats,
             cutoff=cutoff,
             model_version=client.model_version,
@@ -135,6 +181,8 @@ def run(
         markdown=markdown,
         metrics=metrics,
         fully_binned=fully,
+        curves=curves,
+        p_yes=table,
         stats=stats,
         clauses=tuple(clauses),
         highlights=tuple(highlights),

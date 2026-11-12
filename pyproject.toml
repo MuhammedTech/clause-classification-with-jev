@@ -3,7 +3,9 @@ name = "jev-cascade"
 version = "0.1.0"
 description = "Measures how much CUAD license-agreement text Jev can Bin before an expensive model reads it"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "matplotlib>=3.10.9",
+]
 
 [project.scripts]
 jev-cascade = "jev_cascade.cli:main"

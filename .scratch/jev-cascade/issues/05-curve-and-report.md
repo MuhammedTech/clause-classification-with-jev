@@ -28,16 +28,39 @@ Share achievable below it. That is the free saving, and it is the most useful nu
 
 **Blocked by:** 04.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The curve has exactly one row per distinct observed P(yes) per Rule; a test asserts this on
+- [x] The curve has exactly one row per distinct observed P(yes) per Rule; a test asserts this on
       hand-made data.
-- [ ] Each Rule's lowest-scoring held Clause and its achievable Binned Share appear in the report.
-- [ ] The report opens with a per-Rule summary leading with counts, and separately shows the Fully
+- [x] Each Rule's lowest-scoring held Clause and its achievable Binned Share appear in the report.
+- [x] The report opens with a per-Rule summary leading with counts, and separately shows the Fully
       Binned Clause share with a note that per-Rule Binned Share does not combine into it.
-- [ ] Neither accuracy nor ROC AUC appears anywhere; the report says why.
-- [ ] Every section above is present and uses `GLOSSARY.md` vocabulary. No retired term appears.
-- [ ] A per-Rule curve chart is written as a PNG and referenced.
-- [ ] Every stub-derived figure is labelled as stub, not only the timings.
-- [ ] One command rebuilds the whole report from the cache with no network access, and the end-to-end
+- [x] Neither accuracy nor ROC AUC appears anywhere; the report says why.
+- [x] Every section above is present and uses `GLOSSARY.md` vocabulary. No retired term appears.
+- [x] A per-Rule curve chart is written as a PNG and referenced.
+- [x] Every stub-derived figure is labelled as stub, not only the timings.
+- [x] One command rebuilds the whole report from the cache with no network access, and the end-to-end
       test checks each section heading is present.
+
+## Comments
+
+**2026-11-12, resolved.** `evaluator.cutoff_curve` returns one `RuleMetrics` per distinct observed
+P(yes), lowest first, and `evaluator.free_saving` returns the lowest P(yes) of a holding Clause with
+the metrics at the Cutoff just under it (`math.nextafter`, so a Clause tying the lowest held score
+stays Escalated). The report opens with a Summary, adds How this is measured, a per-Rule curve block
+with the free saving, a curve excerpt and a chart, Reading the curve (the classifier reading and the
+cascade reading, with Precision never presented as accuracy) and Vendor caveats. Every table of
+scored figures carries a "Stub-derived" line, not only the timings.
+
+Decisions worth knowing:
+
+- **matplotlib is now a dependency**, for the PNGs. `charts.py` uses the Agg backend, so no display.
+- **The Markdown prints at most 25 curve rows**, chosen by position and never by outcome; the
+  complete curve, one row per distinct P(yes), is `curves/<Rule>.csv`. A real run has thousands of
+  distinct scores per Rule and would bury the report otherwise.
+- **`--from-cache`** rebuilds the report with a client that refuses every call, so it cannot reach
+  the network; a Pair missing from the cache is an error, not a call.
+- **The ticket says "how 53 relates to the 44 and 33".** The measured filters are 53, 44 and 44
+  (`docs/cuad-ground-truth.md`); no filter measures 33. The report states 53 against the two 44s.
+  The 33 looks like R1's document count without Pacira in the gate table, which is a different
+  quantity, so it is not in the report.

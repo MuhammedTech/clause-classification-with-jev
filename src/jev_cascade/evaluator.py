@@ -7,6 +7,7 @@ report can print "n/a" rather than inventing a zero.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Collection, Iterable, Mapping, Sequence
 
@@ -165,6 +166,89 @@ def evaluate_rule(
         inferred_negative_clauses=inferred_clauses,
         inferred_negative_escalated=inferred_escalated,
     )
+
+
+def cutoff_curve(
+    rule_id: str,
+    clauses: Sequence[Clause],
+    highlights: Iterable[Highlight],
+    p_yes: Mapping[ClauseKey, float],
+    certified_negative_docs: Collection[str] = frozenset(),
+) -> tuple[RuleMetrics, ...]:
+    """The Cutoff Curve: one row at every distinct P(yes) Jev gave this Rule, lowest first.
+
+    The piles only change when the Cutoff crosses a score Jev actually gave, so these rows are the
+    complete curve. Nothing is fitted and nothing is chosen: the caller reads it whole.
+    """
+    highlights = list(highlights)
+    observed = sorted({p_yes[clause.key] for clause in clauses if clause.key in p_yes})
+    return tuple(
+        evaluate_rule(rule_id, clauses, highlights, p_yes, score, certified_negative_docs)
+        for score in observed
+    )
+
+
+@dataclass(frozen=True)
+class FreeSaving:
+    """What can be Binned for nothing: strictly below the lowest score of any holding Clause.
+
+    Below that score no Clause holding a Highlight is Binned, so no Highlight is Lost. It is the one
+    figure on the curve that costs nothing, and the most useful number in the report. `metrics` is
+    the Rule evaluated at the Cutoff just under that score, so Precision there is on hand too.
+    """
+
+    rule_id: str
+    lowest_held_p_yes: float
+    metrics: RuleMetrics
+
+    @property
+    def binned_clauses(self) -> int:
+        return self.metrics.binned_clauses
+
+    @property
+    def binned_words(self) -> int:
+        return self.metrics.binned_words
+
+    @property
+    def total_words(self) -> int:
+        return self.metrics.total_words
+
+    @property
+    def clauses(self) -> int:
+        return self.metrics.clauses
+
+    @property
+    def lost_provisions(self) -> int:
+        return self.metrics.lost_provisions
+
+    @property
+    def binned_share(self) -> float | None:
+        return self.metrics.binned_share
+
+
+def free_saving(
+    rule_id: str,
+    clauses: Sequence[Clause],
+    highlights: Iterable[Highlight],
+    p_yes: Mapping[ClauseKey, float],
+) -> FreeSaving | None:
+    """The lowest P(yes) Jev gave a Clause holding a Highlight, and the Binned Share below it.
+
+    `None` when no Clause holds a Highlight, since there is then no score to stay below.
+    """
+    highlights = list(highlights)
+    held_scores = [
+        p_yes[clause.key]
+        for clause in clauses
+        if any(holds(clause, highlight) for highlight in highlights)
+    ]
+    if not held_scores:
+        return None
+    lowest = min(held_scores)
+    # Binned means "at or below" the Cutoff, so the float just under `lowest` Bins exactly the
+    # Clauses scoring strictly less than it.
+    metrics = evaluate_rule(rule_id, clauses, highlights, p_yes, math.nextafter(lowest, -math.inf))
+    return FreeSaving(rule_id=rule_id, lowest_held_p_yes=lowest, metrics=metrics)
 
 
 @dataclass(frozen=True)

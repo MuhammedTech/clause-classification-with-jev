@@ -150,3 +150,35 @@ class FailingJevClient:
             raise JevCallLimitReached(f"stopped after {self.limit} calls")
         self.calls += 1
         return self.inner.p_yes(clause_text, parent_line, question, question_type)
+
+
+class JevCallRefused(RuntimeError):
+    """Raised by `CacheOnlyJevClient` when a Pair is not in the cache."""
+
+
+@dataclass
+class CacheOnlyJevClient:
+    """Wraps a client and refuses every call, so a run can only be served from the cache.
+
+    It lends the wrapped client's model version, which is part of the cache key, and nothing else:
+    rebuilding a report from the cache must never reach the network.
+    """
+
+    inner: JevClient
+
+    @property
+    def model_version(self) -> str:
+        return self.inner.model_version
+
+    @property
+    def is_stub(self) -> bool:
+        return self.inner.is_stub
+
+    def p_yes(
+        self,
+        clause_text: str,
+        parent_line: str,
+        question: str,
+        question_type: str,
+    ) -> float:
+        raise JevCallRefused("this Pair is not in the cache and the run may not ask Jev")

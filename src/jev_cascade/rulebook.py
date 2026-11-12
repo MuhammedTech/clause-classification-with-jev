@@ -105,8 +105,8 @@ SUPERSEDED_GATE_COUNTS: dict[str, SupersededCounts] = {
         documents=16,
         highlights=23,
         why_it_changed=(
-            "measured before Pacira joined the corpus, which carries 3 Uncapped Liability "
-            "Highlights by itself"
+            "measured before Pacira, which carries 3 Uncapped Liability Highlights by itself, "
+            "joined the corpus"
         ),
     ),
 }

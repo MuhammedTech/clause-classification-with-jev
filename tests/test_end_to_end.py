@@ -8,7 +8,7 @@ from jev_cascade.corpus import load_corpus
 from jev_cascade.domain import holds
 from jev_cascade.jev import CountingJevClient, StubJevClient
 from jev_cascade.pipeline import TRACER_DOC_IDS, run
-from jev_cascade.rulebook import RULEBOOK, rule
+from jev_cascade.rulebook import DROPPED_REASONS, RULEBOOK, rule
 from jev_cascade.splitter import split_document
 
 pytestmark = pytest.mark.skipif(
@@ -179,8 +179,12 @@ def test_the_report_gives_the_corrected_reason_uncapped_liability_was_dropped(tm
     assert "only Rule failing" not in markdown
     assert "the gate is not a reason to drop this Rule" in markdown
     assert "superseded" in markdown
-    # Being compound does not distinguish R4 from R2 and R6, which survive, so it is not given.
-    assert "compound" not in markdown
+    # The report gives exactly the ground ADR-0005 still stands behind, and being compound is not
+    # part of it: R2 and R6 were compound too and survive. Asserted on the reason itself rather
+    # than on the whole report, because ticket 05 must be free to state the cost of asking R2 and
+    # R6 a blunter question (ADR-0005: "the cost is real and should be stated in the report").
+    assert "compound" not in DROPPED_REASONS["R4"]
+    assert DROPPED_REASONS["R4"] in markdown
 
 
 def test_the_report_warns_that_r5_and_r8_changed_meaning(tmp_path):

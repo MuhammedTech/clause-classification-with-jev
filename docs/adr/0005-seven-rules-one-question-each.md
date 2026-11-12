@@ -23,9 +23,11 @@ testing reports that a yes/no question whose true answer means "no" is answered 
 
 ## Why R4 is dropped
 
-> **Corrected 2026-11-12 — see the note at the bottom.** The gate argument in this section no
-> longer holds: on all 53 documents Uncapped Liability measures 17 documents and 26 spans and
-> passes. The independence argument stands, and is now the standing reason.
+> **Corrected 2026-11-12 — see the note at the bottom.** Two of the three arguments in this section
+> are withdrawn. The gate argument no longer holds: on all 53 documents Uncapped Liability measures
+> 17 documents and 26 spans and passes. Being compound does not discriminate either, since R2 and R6
+> were also compound and both survive. The independence argument stands, and is the only standing
+> reason.
 
 Uncapped Liability is the only rule that fails the gate of at least 15 documents with a span and at
 least 25 spans: measured, **16 documents and 23 spans** on this corpus. It is also not independent of

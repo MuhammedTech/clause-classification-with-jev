@@ -11,13 +11,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from . import config
 from .charts import write_curve_chart, write_curve_csv
 from .corpus import corpus_facts, load_corpus
 from .domain import Clause, Highlight
 from .evaluator import (
+    ClauseKey,
     FullyBinned,
     RuleMetrics,
     cutoff_curve,
@@ -69,7 +70,7 @@ def _write_curve(
     r: Rule,
     clauses: Sequence[Clause],
     highlights: Sequence[Highlight],
-    p_yes: dict,
+    p_yes: Mapping[ClauseKey, float],
     certified_negative_docs: set[str],
     out_dir: Path,
     is_stub: bool,

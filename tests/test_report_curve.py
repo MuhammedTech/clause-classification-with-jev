@@ -64,6 +64,15 @@ def test_the_summary_leads_with_counts_and_the_lowest_held_score(result):
     assert f"{saving.binned_words}/{saving.total_words} words" in row
 
 
+def test_the_free_saving_paragraph_names_the_clause_that_set_the_lowest_p_yes(result):
+    section = _section(result.markdown, "## R1 — ")
+    (curve,) = result.curves
+    doc_id, span = curve.saving.lowest_held_clause
+    assert f"characters {span} of {doc_id}" in section
+    # The paragraph carries its own stub label, not only the tables around it.
+    assert "_Stub-derived._ The lowest P(yes)" in section
+
+
 def test_the_summary_shows_the_fully_binned_share_apart_from_the_per_rule_figures(result):
     summary = _section(result.markdown, "## Summary")
     fully = result.fully_binned

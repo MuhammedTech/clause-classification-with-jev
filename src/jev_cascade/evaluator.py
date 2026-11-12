@@ -177,28 +177,30 @@ def cutoff_curve(
 ) -> tuple[RuleMetrics, ...]:
     """The Cutoff Curve: one row at every distinct P(yes) Jev gave this Rule, lowest first.
 
-    The piles only change when the Cutoff crosses a score Jev actually gave, so these rows are the
+    The piles only change when the Cutoff crosses a P(yes) Jev actually gave, so these rows are the
     complete curve. Nothing is fitted and nothing is chosen: the caller reads it whole.
     """
     highlights = list(highlights)
     observed = sorted({p_yes[clause.key] for clause in clauses if clause.key in p_yes})
     return tuple(
-        evaluate_rule(rule_id, clauses, highlights, p_yes, score, certified_negative_docs)
-        for score in observed
+        evaluate_rule(rule_id, clauses, highlights, p_yes, observed_p_yes, certified_negative_docs)
+        for observed_p_yes in observed
     )
 
 
 @dataclass(frozen=True)
 class FreeSaving:
-    """What can be Binned for nothing: strictly below the lowest score of any holding Clause.
+    """What can be Binned for nothing: strictly below the lowest P(yes) of any holding Clause.
 
-    Below that score no Clause holding a Highlight is Binned, so no Highlight is Lost. It is the one
+    Below that P(yes) no Clause holding a Highlight is Binned, so no Highlight is Lost. It is the one
     figure on the curve that costs nothing, and the most useful number in the report. `metrics` is
-    the Rule evaluated at the Cutoff just under that score, so Precision there is on hand too.
+    the Rule evaluated at the Cutoff just under that P(yes), so Precision there is on hand too.
     """
 
     rule_id: str
     lowest_held_p_yes: float
+    #: The Clause that was given it. On a tie, the first by (document, span), so it is stable.
+    lowest_held_clause: ClauseKey
     metrics: RuleMetrics
 
     @property
@@ -234,21 +236,26 @@ def free_saving(
 ) -> FreeSaving | None:
     """The lowest P(yes) Jev gave a Clause holding a Highlight, and the Binned Share below it.
 
-    `None` when no Clause holds a Highlight, since there is then no score to stay below.
+    `None` when no Clause holds a Highlight, since there is then no P(yes) to stay below.
     """
     highlights = list(highlights)
-    held_scores = [
-        p_yes[clause.key]
+    held = [
+        (p_yes[clause.key], clause.key)
         for clause in clauses
         if any(holds(clause, highlight) for highlight in highlights)
     ]
-    if not held_scores:
+    if not held:
         return None
-    lowest = min(held_scores)
+    lowest, lowest_clause = min(held)
     # Binned means "at or below" the Cutoff, so the float just under `lowest` Bins exactly the
     # Clauses scoring strictly less than it.
     metrics = evaluate_rule(rule_id, clauses, highlights, p_yes, math.nextafter(lowest, -math.inf))
-    return FreeSaving(rule_id=rule_id, lowest_held_p_yes=lowest, metrics=metrics)
+    return FreeSaving(
+        rule_id=rule_id,
+        lowest_held_p_yes=lowest,
+        lowest_held_clause=lowest_clause,
+        metrics=metrics,
+    )
 
 
 @dataclass(frozen=True)

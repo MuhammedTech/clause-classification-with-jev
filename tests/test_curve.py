@@ -31,7 +31,7 @@ def test_each_row_is_the_ordinary_evaluation_at_that_cutoff():
     assert (low.binned_clauses, low.binned_words, low.lost_provisions) == (1, 3, 0)
     # At 0.50 C0, C1, C3 are Binned (6 words); C1's Highlight is Lost.
     assert (mid.binned_clauses, mid.binned_words, mid.lost_provisions) == (3, 6, 1)
-    # At the highest score everything is Binned.
+    # At the highest P(yes) everything is Binned.
     assert (high.binned_clauses, high.binned_words, high.lost_provisions) == (4, 10, 2)
 
 
@@ -39,17 +39,18 @@ def test_a_curve_over_no_clauses_has_no_rows():
     assert cutoff_curve("R1", [], [], {}) == ()
 
 
-def test_the_free_saving_is_what_can_be_binned_strictly_below_the_lowest_held_score():
+def test_the_free_saving_is_what_can_be_binned_strictly_below_the_lowest_held_p_yes():
     # The lowest P(yes) of a holding Clause is C1's 0.50. Strictly below it only C0 (3 words) is
     # Binned: 3/10 words, 1 Clause, and no Highlight is lost by construction.
     saving = free_saving("R1", FOUR_CLAUSES, TWO_HIGHLIGHTS, FOUR_PYES)
     assert saving.lowest_held_p_yes == 0.50
+    assert saving.lowest_held_clause == ("D", "20-40")
     assert (saving.binned_clauses, saving.binned_words, saving.total_words) == (1, 3, 10)
     assert saving.binned_share == 0.3
     assert saving.lost_provisions == 0
 
 
-def test_a_clause_scoring_exactly_the_lowest_held_score_is_not_free():
+def test_a_clause_scoring_exactly_the_lowest_held_p_yes_is_not_free():
     # C3 ties C1 at 0.50 and holds nothing, but binning at 0.50 would bin C1 too. So C3 stays
     # Escalated: it is not in the 3 words.
     saving = free_saving("R1", FOUR_CLAUSES, TWO_HIGHLIGHTS, FOUR_PYES)

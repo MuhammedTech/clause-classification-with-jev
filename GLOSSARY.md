@@ -138,6 +138,18 @@ Of Clauses Escalated for a Rule, the share that hold a Highlight. Measures the e
 wasted reading, not wrong final answers. At a ~1% base rate it reads in single digits by arithmetic.
 _Avoid_: false positive rate, accuracy
 
+**Free Saving**:
+The share of contract words Binned strictly below the lowest P(yes) Jev gave to any Clause holding a
+Highlight, per Rule. No Highlight is Lost there, so it costs nothing. It is read off the Cutoff Curve
+after seeing it, so it is a headline and never a tuned Cutoff.
+_Avoid_: safe cutoff, optimal cutoff, operating point
+
+**Classifier Reading / Cascade Reading**:
+The two ways to read the Cutoff Curve. The classifier reading is around a Cutoff of 0.5, where
+P(yes) is taken as a yes/no answer and Recall and Precision mean what they usually do. The cascade
+reading is at the low end, just under the Free Saving point, where nearly everything is Escalated and
+Precision is low by design. Quoting Precision at a low Cutoff as Jev's accuracy would be wrong.
+
 **Cutoff Curve**:
 The table of Clause Recall, Provision Recall, Precision, Lost Provisions and Binned Share at every
 observed P(yes) for a Rule. The result of the experiment. Nothing is fitted, so nothing can overfit.

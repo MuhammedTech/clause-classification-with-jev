@@ -86,8 +86,9 @@ def _corpus_section(corpus: CorpusFacts) -> list[str]:
         f"The **License Agreement Set** is the {filters.csv_document_name} rows of "
         '`master_clauses.csv` whose `Document Name` contains "licen". Two other filters give a '
         "different set and are not the one used, which is why earlier notes disagree on the size. "
-        f"The {filters.csv_filename} and the {filters.json_title} each come from a different "
-        f"column, and neither is the {filters.csv_document_name}:",
+        f"The {filters.csv_filename} comes from the `Filename` column and the "
+        f"{filters.json_title} from the JSON `title`, so neither is the "
+        f"{filters.csv_document_name}:",
         "",
         "| Filter | Documents |",
         "| --- | --- |",
@@ -374,9 +375,12 @@ def _curve_block(inputs: ReportInputs, curve: RuleCurve) -> list[str]:
             "there is no score to stay below."
         )
     else:
+        doc_id, span = saving.lowest_held_clause
+        stub = "_Stub-derived._ " if inputs.is_stub else ""
         lines.append(
-            f"**Free saving.** The lowest P(yes) Jev gave a Clause holding a Highlight is "
-            f"**{saving.lowest_held_p_yes:g}**. Strictly below it "
+            f"**Free saving.** {stub}The lowest P(yes) Jev gave a Clause holding a Highlight is "
+            f"**{saving.lowest_held_p_yes:g}**, given to the Clause at characters {span} of "
+            f"{doc_id}. Strictly below it "
             f"{saving.binned_clauses} of {saving.clauses} Clauses are Binned, which is "
             f"{_count_pair(saving.binned_words, saving.total_words)} words "
             f"(**{_format_share(saving.binned_share)}**), and {saving.lost_provisions} Highlights "
@@ -424,8 +428,9 @@ def _reading_section(inputs: ReportInputs) -> list[str]:
         "",
         "The same curve is read two ways, and mixing them up is the commonest mistake.",
         "",
-        "- **The classifier reading, around a Cutoff of 0.5.** Jev's P(yes) is treated as a yes/no "
-        "answer. Recall and Precision mean what they usually mean.",
+        "- **The classifier reading, at a Cutoff around 0.5.** Jev's P(yes) is treated as a yes/no "
+        f"answer. Recall and Precision mean what they usually mean. This run's fixed Cutoff is "
+        f"{inputs.cutoff:g}, and the classifier rows below are read there.",
         "- **The cascade reading, at the low end.** The Cutoff sits just under the lowest P(yes) of "
         "any holding Clause, so almost everything is Escalated and Precision is low by design. "
         "Escalated here means Jev could not rule the Clause out, not that it detected anything. The "

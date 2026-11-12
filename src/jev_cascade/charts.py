@@ -100,7 +100,8 @@ def write_curve_chart(
     )
     for label, colour, values in lines:
         xs, ys = series(values)
-        axes.plot(xs, ys, color=colour, linewidth=2, label=label, solid_capstyle="round")
+        # Steps, not slopes: nothing is measured between two P(yes) values Jev actually gave.
+        axes.plot(xs, ys, color=colour, linewidth=2, label=label, drawstyle="steps-post")
 
     if saving is not None:
         axes.axvline(saving.lowest_held_p_yes, color=INK_SECONDARY, linewidth=1, linestyle=":")

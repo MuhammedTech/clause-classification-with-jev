@@ -64,3 +64,13 @@ Decisions worth knowing:
   (`docs/cuad-ground-truth.md`); no filter measures 33. The report states 53 against the two 44s.
   The 33 looks like R1's document count without Pacira in the gate table, which is a different
   quantity, so it is not in the report.
+
+**Code review (Standards and Spec).** No hard violations on either axis. Fixed: the free-saving
+paragraph now names the Clause that set the lowest P(yes) and carries its own stub label; the
+classifier-reading prose no longer hard-codes 0.5 beside a row read at the run's Cutoff; the chart
+draws steps between observed P(yes) values, not slopes; "score" is P(yes) in code and tests;
+`GLOSSARY.md` gained Free Saving and Classifier / Cascade Reading.
+
+Left alone, as judgement calls: splitting `report.py` into section modules, a shared helper for the
+four recall/precision cells, `FreeSaving`'s forwarding properties, and a `RuleInputs` type for the
+Rule-evaluation parameters. Worth doing when ticket 06 touches the report again.

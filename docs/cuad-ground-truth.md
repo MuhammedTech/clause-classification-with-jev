@@ -126,6 +126,35 @@ Reliability runs inversely to how common the clause type is.
 
 This is why ADR-0003 reports a separate false-alarm rate on certified-negative documents.
 
+## The text to split is the JSON `context`, and some documents have no line structure
+
+Measured on 2026-11-12, while building the tracer bullet.
+
+The text every span offset is measured against is `paragraphs[0].context` in `CUAD_v1.json`. **Split
+that, not `full_contract_txt/`.** The two are not interchangeable: no file in `full_contract_txt/`
+is byte-identical to its JSON `context`, and the directory's filenames do not normalise onto the CSV
+`Filename` column the way the titles do, so joining to them is a second unsolved join. Splitting the
+`.txt` and grading against JSON offsets would shift every overlap silently.
+
+Splitting the JSON `context` at line-start item markers gives **3,669 clauses** over the 53
+documents, against the 3,244 measured earlier with a slightly stricter marker pattern. The largest
+clause reproduces exactly, at **16,176 words**, and **31 of the 53 documents** hold a clause over 600
+words.
+
+**The line structure is a page artefact, and in some documents it is absent.** Newlines sit at page
+boundaries, not at item boundaries: 21,172 newlines across 2,990,822 characters, so a "line" is
+about one page. Most documents still carry their item markers at the start of a line, which is why
+the naive partition works at all. But some do not. In
+`HertzGroupRealtyTrustInc_..._Trademark License Agreement` an entire page is one line —
+`ARTICLE 1. BACKGROUND AND DEFINITIONS 1.1 Licensor has adopted ... 1.2 Licensee is ...` — and the
+whole 14,313-character contract yields **4 clauses**.
+
+This matters for the oversized split in ADR-0004: **a document like that has no paragraph breaks to
+split at either**, so cutting oversized clauses at paragraph breaks cannot bring it under the word
+ceiling. Ticket 03 needs a fallback that does not depend on finding a newline. The ticket 01 tracer
+documents were therefore chosen from documents the line-start splitter does partition sensibly, so
+the tracer exercises the pipeline rather than this weak spot.
+
 ## Spans sit inside one clause 97% of the time
 
 Of the 429 spans, 418 contain no item marker, 5 contain one, 1 contains two, and 5 contain four or

@@ -17,17 +17,40 @@ ADR-0003.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] The project installs with uv and runs tests with pytest.
-- [ ] One command produces a Markdown report with an R1 table showing Clause Recall, Precision, Lost
+- [x] The project installs with uv and runs tests with pytest.
+- [x] One command produces a Markdown report with an R1 table showing Clause Recall, Precision, Lost
       Provisions and Binned Share, each beside its counts.
-- [ ] The Jev client is an interface. The stub returns deterministic, seeded P(yes) values.
-- [ ] P(yes) results are cached as JSONL keyed by document, Clause, Rule, question type and model
+- [x] The Jev client is an interface. The stub returns deterministic, seeded P(yes) values.
+- [x] P(yes) results are cached as JSONL keyed by document, Clause, Rule, question type and model
       version.
-- [ ] A second run makes zero client calls, and a run interrupted midway resumes from the cache.
-- [ ] An Evaluator test on a hand-made document shows a Clause overlapping a Highlight by one
+- [x] A second run makes zero client calls, and a run interrupted midway resumes from the cache.
+- [x] An Evaluator test on a hand-made document shows a Clause overlapping a Highlight by one
       character holds it, and a Clause overlapping none does not.
-- [ ] An Evaluator test shows a Highlight whose only holding Clause is Binned is a Lost Provision.
-- [ ] An end-to-end test (Seam C) runs the command on 2–3 real documents with the stub, checks the
+- [x] An Evaluator test shows a Highlight whose only holding Clause is Binned is a Lost Provision.
+- [x] An end-to-end test (Seam C) runs the command on 2–3 real documents with the stub, checks the
       report exists with the R1 table, and checks a rerun makes no client calls.
+
+## Comments
+
+**2026-11-12.** Built on branch `worktree-jev-cascade-01-tracer-bullet`. Every stage of the spec now
+runs end to end for R1 on three real documents with the stub: Corpus, Splitter, Rulebook, Jev client,
+Jev runner, Evaluator, Report. 58 tests pass.
+
+Two findings worth carrying forward:
+
+- **Tracer documents were re-chosen.** The first pick included documents whose pages collapse to a
+  single line, where the line-start splitter yields 4 clauses for a whole contract. The three used
+  now (WebMD, Sparkling Spring Water, DataCall) partition sensibly, two carry R1 Highlights and one
+  is Certified Negative for R1. See the note appended to ticket 03.
+- **The join needed an explicit extension strip.** `os.path.splitext` cuts a title like
+  `..._EX-10.B(01)_Content License Agreement` at its last dot and throws most of the name away, so
+  only 3 of 53 documents joined. Stripping a literal `.pdf` / `.txt` suffix instead resolves all 53,
+  Pacira included.
+
+Deliberately left for later tickets: the word ceiling and heading rules (03), the gate and the full
+ground-truth assertions (02), the Cutoff Curve, charts and report sections (05), the cost and time
+estimate (06), the real HTTP client (07). `provision_recall` is computed because Lost Provisions
+needs the same per-Highlight pass, but the report table shows only the four figures this ticket asks
+for.

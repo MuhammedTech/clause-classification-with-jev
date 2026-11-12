@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Secrets: the Jev key comes from the user
+.env
+
+# Generated run output: the cache and the report are rebuildable
+out/
+*.jsonl

@@ -34,3 +34,17 @@ reported statistics rather than silently wrong, which is why all 53 documents st
 - [ ] The report shows Clause count, the word-length distribution, the share of Highlights inside one
       Clause (expect about 97%), that share per document so a bad split is visible, and the token
       growth from Parent Line context.
+
+## Comments
+
+**2026-11-12, from ticket 01.** The word ceiling needs a fallback that does not depend on finding a
+paragraph break. Newlines in the JSON `context` sit at page boundaries, not item boundaries, and in
+some documents a whole page is a single line: `HertzGroupRealtyTrustInc_..._Trademark License
+Agreement` is 14,313 characters and partitions into **4 clauses**, with no paragraph break inside
+them to split at. Splitting oversized clauses at paragraph breaks therefore cannot bring those
+documents under the ceiling. Measured detail is in `docs/cuad-ground-truth.md` under "The text to
+split is the JSON `context`".
+
+Also settled in ticket 01, so ticket 03 need not rediscover it: split the JSON `context`, never
+`full_contract_txt/`. No file there is byte-identical to its `context`, and its filenames do not
+normalise onto the CSV `Filename` column.

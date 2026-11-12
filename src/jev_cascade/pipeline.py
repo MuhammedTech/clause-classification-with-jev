@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Sequence
 
 from . import config
-from .corpus import load_corpus
+from .corpus import corpus_facts, load_corpus
 from .domain import Clause, Highlight
 from .evaluator import RuleMetrics, evaluate_rule
 from .jev import JevClient, StubJevClient
@@ -108,6 +108,9 @@ def run(
             model_version=client.model_version,
             documents=doc_rows,
             is_stub=client.is_stub,
+            # Corpus-wide and counted from CUAD, so it does not depend on which documents or
+            # Rules this run scored: the gate is a statement about the available ground truth.
+            corpus=corpus_facts(directory=cuad_directory),
         )
     )
 

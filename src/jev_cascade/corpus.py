@@ -9,12 +9,15 @@ stripped first. With that normalisation all 53 resolve; without it Pacira fails,
 Two other filters give different counts and are not the set we use: CSV `Filename` containing
 "licen" gives 44, and JSON `title` containing "licen" gives 44.
 
-Document text comes from the JSON `context`, the same record the Highlight offsets are measured
-against. The `full_contract_txt/` files can differ in whitespace, which would silently shift every
-overlap.
+Document text comes from the JSON `context`, the same string the Highlight offsets are measured
+against, so grading and splitting see one text. `full_contract_txt/` is not an alternative because
+it is incomplete: 19 files ship for 510 documents and only 3 of these 53 have one. Those 3 are
+byte-identical to their `context`, so the two sources are not known to disagree — there is simply
+not enough of one to use.
 
-Ticket 02 deepens this module with the Rulebook gate and the measured assertions from
-`docs/cuad-ground-truth.md`.
+This module also owns the **gate**: each Rule's document and span counts. They come from CUAD's
+own annotations rather than from the Splitter, so the gate is settled here once and never
+re-checked after a run (ADR-0005).
 """
 
 from __future__ import annotations
@@ -29,10 +32,18 @@ from typing import Iterable, Sequence
 
 from . import config
 from .domain import Highlight
-from .rulebook import RULEBOOK, Rule
+from .rulebook import DROPPED_RULES, RULEBOOK, Rule
 
 _NON_ALPHANUMERIC = re.compile(r"[^a-z0-9]")
 _EXTENSION = re.compile(r"\.(pdf|txt)$", re.IGNORECASE)
+
+#: The License Agreement Set is exactly this many documents. Asserted, not assumed.
+CORPUS_DOCUMENTS = 53
+
+#: The gate from ADR-0005: a Rule is worth asking only with this many documents carrying a span
+#: and this many spans in total. Below either, the denominators are too thin to read a curve off.
+GATE_MIN_DOCUMENTS = 15
+GATE_MIN_SPANS = 25
 
 
 def join_key(name: str) -> str:
@@ -173,3 +184,104 @@ def load_corpus(
             raise RuntimeError(f"No License Agreement Set document matches {sorted(unknown)}")
 
     return tuple(documents)
+
+
+@dataclass(frozen=True)
+class RuleCounts:
+    """One Rule's gate row: how much ground truth CUAD gives it across the whole corpus.
+
+    Counted from CUAD annotations, never from the Splitter, so these numbers do not move when the
+    partition changes and the gate does not need re-checking after a run.
+    """
+
+    rule_id: str
+    cuad_category: str
+    documents_with_spans: int
+    spans: int
+    certified_negative_doc_ids: tuple[str, ...]
+
+    @property
+    def certified_negative_documents(self) -> int:
+        """Documents CUAD flags as having no such clause anywhere, so every Clause in them is a
+        Certified Negative for this Rule."""
+        return len(self.certified_negative_doc_ids)
+
+    @property
+    def passes_gate(self) -> bool:
+        return self.documents_with_spans >= GATE_MIN_DOCUMENTS and self.spans >= GATE_MIN_SPANS
+
+
+def _rule_counts(
+    documents: Sequence[Document],
+    rules: Sequence[Rule],
+) -> tuple[RuleCounts, ...]:
+    """Count one set of Rules over documents already loaded with those same Rules."""
+    counts: list[RuleCounts] = []
+    for rule_ in rules:
+        with_spans = [d for d in documents if d.highlights_for(rule_.id)]
+        counts.append(
+            RuleCounts(
+                rule_id=rule_.id,
+                cuad_category=rule_.cuad_category,
+                documents_with_spans=len(with_spans),
+                spans=sum(len(d.highlights_for(rule_.id)) for d in with_spans),
+                certified_negative_doc_ids=tuple(
+                    d.doc_id for d in documents if d.is_certified_negative(rule_.id)
+                ),
+            )
+        )
+    return tuple(counts)
+
+
+def gate_counts(
+    rules: Sequence[Rule] | None = None,
+    directory: Path | None = None,
+) -> tuple[RuleCounts, ...]:
+    """Each Rule's document and span counts over the **whole** corpus, with the gate result.
+
+    Deliberately independent of whatever subset a run scores: the gate is a statement about the
+    ground truth available, not about one run's documents, so it always loads all 53.
+    """
+    rules = list(rules if rules is not None else RULEBOOK)
+    return _rule_counts(load_corpus(rules=rules, directory=directory), rules)
+
+
+@dataclass(frozen=True)
+class CorpusFacts:
+    """How the corpus was chosen and how much ground truth it holds, for the report.
+
+    Everything here is counted from CUAD, so none of it moves when the Splitter changes.
+    """
+
+    documents: int
+    characters: int
+    filter_counts: dict[str, int]
+    gate: tuple[RuleCounts, ...]
+    dropped: tuple[RuleCounts, ...]
+
+    @property
+    def spans(self) -> int:
+        """Highlights across the seven Rules of the Rulebook."""
+        return sum(c.spans for c in self.gate)
+
+    @property
+    def gate_passes(self) -> bool:
+        return all(c.passes_gate for c in self.gate)
+
+
+def corpus_facts(directory: Path | None = None) -> CorpusFacts:
+    """The corpus-level facts the report states, measured in one pass over all 53 documents.
+
+    The dropped Rules are counted alongside the Rulebook so the report can print what they measure
+    instead of restating a reason from memory: ADR-0005 dropped R4 as the only Rule failing the
+    gate, which was measured before Pacira joined and is no longer true.
+    """
+    rules = list(RULEBOOK) + list(DROPPED_RULES)
+    documents = load_corpus(rules=rules, directory=directory)
+    return CorpusFacts(
+        documents=len(documents),
+        characters=sum(len(d.text) for d in documents),
+        filter_counts=filter_counts(directory),
+        gate=_rule_counts(documents, RULEBOOK),
+        dropped=_rule_counts(documents, DROPPED_RULES),
+    )

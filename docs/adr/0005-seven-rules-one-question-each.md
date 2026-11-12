@@ -23,6 +23,10 @@ testing reports that a yes/no question whose true answer means "no" is answered 
 
 ## Why R4 is dropped
 
+> **Corrected 2026-11-12 — see the note at the bottom.** The gate argument in this section no
+> longer holds: on all 53 documents Uncapped Liability measures 17 documents and 26 spans and
+> passes. The independence argument stands, and is now the standing reason.
+
 Uncapped Liability is the only rule that fails the gate of at least 15 documents with a span and at
 least 25 spans: measured, **16 documents and 23 spans** on this corpus. It is also not independent of
 R1, because uncapped liability appears in these contracts as a carve-out from a cap, so the two rules
@@ -55,3 +59,22 @@ could be. If a later run shows those two trailing, splitting them is the first t
   on the splitter, so there is no need to re-check the gate after the real run.
 - The rules that survive were chosen partly for having clean definitions, which will make results read
   optimistically. The report must say that too.
+
+## Correction, 2026-11-12: Uncapped Liability passes the gate
+
+Measured by the ticket 02 corpus loader over all 53 documents, **Uncapped Liability is 17 documents
+and 26 spans**, one span above the gate. The 16 and 23 recorded above were measured before Pacira
+joined the corpus — it joins only once the filename-to-title comparison normalises `A&R` against
+`A_R` — and Pacira carries spans for six of the seven rules plus two for Uncapped Liability.
+
+**The decision does not change.** R4 stays out on the second argument above, which the new counts do
+not touch: uncapped liability appears in these contracts as a carve-out from an R1 cap, so the two
+rules mark overlapping text and cannot be read separately, and it was one of the compound rules.
+
+**The first argument must not be repeated.** "The only rule failing the gate" is now false, and
+calling it that in the report would be a measured claim contradicted by the data. The report prints
+R4's real counts beside the reason instead. Also corrected: the backups read 29 / 92 and 17 / 52, and
+the seven Rulebook rules read as in the table in `docs/cuad-ground-truth.md`.
+
+If the user wants R4 back, the gate no longer blocks it; the independence problem and ticket 08's
+wording work are what to weigh.

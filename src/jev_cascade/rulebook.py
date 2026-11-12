@@ -1,8 +1,14 @@
 """The Rulebook: seven Rules, one positively phrased Detection Question each (ADR-0005).
 
 The numbering keeps the gap at R4 so these ids stay comparable with the earlier notes. Uncapped
-Liability was R4 and is dropped: it is the only Rule failing the gate of at least 15 documents with
-a span and at least 25 spans, and it is not independent of R1.
+Liability was R4 and is dropped **because it is not independent of R1** — it appears in these
+contracts as a carve-out from a cap, so the two Rules mark overlapping text — and because it was one
+of the compound Rules.
+
+It is *not* dropped for failing the gate. ADR-0005 said it was the only Rule to fail, at 16
+documents and 23 spans, but that was measured before Pacira joined the corpus. On all 53 documents
+it measures **17 documents and 26 spans** and passes the gate by one span. See the correction note
+in ADR-0005.
 
 R5 and R8 changed meaning from the original notes — Exclusivity replaced Non-Compete and
 Anti-Assignment replaced Volume Restriction — so their results must not be compared to the old
@@ -59,6 +65,28 @@ RULEBOOK: tuple[Rule, ...] = (
     ),
 )
 
+#: The Rules that were considered and dropped, kept here so the report can print their measured
+#: counts rather than a remembered reason. They are never asked: they are not in `RULEBOOK`.
+DROPPED_RULES: tuple[Rule, ...] = (
+    Rule("R4", "Uncapped Liability", "Does this clause leave a party's liability uncapped?"),
+)
+
+#: Why each dropped Rule is out, for the report. Independence, not the gate — see the module
+#: docstring and the correction note in ADR-0005.
+DROPPED_REASONS: dict[str, str] = {
+    "R4": (
+        "It is not independent of R1 — uncapped liability appears in these contracts as a "
+        "carve-out from a cap, so the two Rules mark overlapping text and cannot be read "
+        "separately. It was also one of the compound Rules, whose sub-questions ADR-0005 drops."
+    ),
+}
+
+#: R5 and R8 replaced thinner Rules and so must not be compared to the earlier notes' results.
+REPLACED_RULES: dict[str, str] = {
+    "R5": "Non-Compete",
+    "R8": "Volume Restriction",
+}
+
 _BY_ID = {rule.id: rule for rule in RULEBOOK}
 
 
@@ -67,9 +95,9 @@ def rule(rule_id: str) -> Rule:
     try:
         return _BY_ID[rule_id]
     except KeyError:
-        if rule_id == "R4":
+        if rule_id in DROPPED_REASONS:
             raise KeyError(
-                "R4 was dropped in ADR-0005: it is the only Rule failing the gate, at 16 "
-                "documents and 23 spans, and it is not independent of R1"
+                f"{rule_id} was dropped in ADR-0005: {DROPPED_REASONS[rule_id]} It passes the "
+                "gate on the full 53 documents, at 17 documents and 26 spans"
             ) from None
         raise KeyError(f"Unknown rule {rule_id}; the Rulebook holds {sorted(_BY_ID)}") from None

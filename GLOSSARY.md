@@ -43,6 +43,12 @@ _Avoid_: check, criterion, category (when meaning the rule)
 **Rulebook**:
 The fixed set of seven Rules the experiment scores.
 
+**Gate**:
+The minimum ground truth a Rule needs to be worth asking: at least 15 documents carrying a
+Highlight and at least 25 Highlights in total. Counted from CUAD annotations, never from the
+Splitter, so it is settled once when the Corpus loads and never re-checked after a run.
+_Avoid_: threshold (which means a Cutoff), sanity check, viability test
+
 **Detection Question**:
 The single positively phrased yes/no question asked of a Clause for one Rule. Positive phrasing means
 a high P(yes) always means "relevant".
@@ -145,4 +151,4 @@ not reuse them.
 | Touch | Renamed Holds |
 | Lead-in | Renamed Parent Line, and the lead-in touch rule is dropped (ADR-0004) |
 | Sub-question | Dropped; one question per Rule (ADR-0005) |
-| Uncapped Liability / R4 | Dropped; the only Rule failing the gate (ADR-0005) |
+| Uncapped Liability / R4 | Dropped as not independent of R1 (ADR-0005). It was dropped for failing the gate, but on all 53 documents it passes at 17 documents and 26 spans; see the correction note in ADR-0005 |

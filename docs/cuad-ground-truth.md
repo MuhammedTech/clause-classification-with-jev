@@ -71,22 +71,33 @@ answer**. Every clause in such a document is a verified negative for that rule.
 
 Gate from the old spec: at least 15 documents with a span and at least 25 spans.
 
-| Rule | CUAD category | Docs with spans | Spans | Docs certified as having none | Gate |
-| --- | --- | --- | --- | --- | --- |
-| R8 | Anti-Assignment | 40 | 83 | 12 | pass |
-| R1 | Cap On Liability | 33 | 78 | 19 | pass |
-| R2 | Post-Termination Services | 25 | 58 | 27 | pass |
-| R5 | Exclusivity | 23 | 55 | 29 | pass |
-| R3 | Termination For Convenience | 21 | 30 | 31 | pass |
-| R7 | Change Of Control | 19 | 39 | 33 | pass |
-| R6 | Minimum Commitment | 17 | 51 | 35 | pass |
-| — | Uncapped Liability (dropped) | 16 | 23 | 36 | **fail** |
-| — | Audit Rights (backup) | 28 | 86 | 24 | pass |
-| — | IP Ownership Assignment (backup) | 16 | 45 | 36 | pass |
+Re-measured on 2026-11-12 over **all 53 documents, Pacira included**, by the corpus loader's gate
+(ticket 02). The earlier version of this table excluded Pacira, which was added after it was
+computed; its numbers are kept in the right-hand column so the correction is visible.
 
-Counts for the first nine rows exclude Pacira; it joins but was added after this table was computed,
-so each row is a floor by a few spans. Uncapped Liability is the only rule that fails, which is why
-ADR-0005 drops it. Neither backup is needed.
+| Rule | CUAD category | Docs with spans | Spans | Docs certified as having none | Gate | Was, without Pacira |
+| --- | --- | --- | --- | --- | --- | --- |
+| R8 | Anti-Assignment | 41 | 85 | 12 | pass | 40 / 83 / 12 |
+| R1 | Cap On Liability | 34 | 82 | 19 | pass | 33 / 78 / 19 |
+| R2 | Post-Termination Services | 26 | 76 | 27 | pass | 25 / 58 / 27 |
+| R5 | Exclusivity | 24 | 58 | 29 | pass | 23 / 55 / 29 |
+| R3 | Termination For Convenience | 22 | 33 | 31 | pass | 21 / 30 / 31 |
+| R7 | Change Of Control | 20 | 44 | 33 | pass | 19 / 39 / 33 |
+| R6 | Minimum Commitment | 17 | 51 | 36 | pass | 17 / 51 / 35 |
+| — | Uncapped Liability (dropped) | 17 | 26 | 36 | **pass** | 16 / 23 / 36 |
+| — | Audit Rights (backup) | 29 | 92 | 24 | pass | 28 / 86 / 24 |
+| — | IP Ownership Assignment (backup) | 17 | 52 | 36 | pass | 16 / 45 / 36 |
+
+For every rule, docs with spans plus docs certified as having none is exactly 53: no document is
+silently missing a category. The seven Rulebook rules hold **429 spans** between them, which is the
+same 429 whose offsets are checked above.
+
+**Uncapped Liability now passes the gate**, at 17 documents and 26 spans — one span over it. The
+earlier 16 / 23 was measured before Pacira joined. So the reason ADR-0005 gives first, that it is
+the only rule to fail the gate, no longer holds; its independence argument does, and that is now the
+standing reason. See the correction note in ADR-0005. Neither backup is needed either way.
+
+These counts are asserted in `tests/test_corpus.py` rather than kept in a script.
 
 ## The base rate is about 1%, and it caps what precision can look like
 

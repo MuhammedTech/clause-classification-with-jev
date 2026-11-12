@@ -8,7 +8,7 @@ from jev_cascade.corpus import load_corpus
 from jev_cascade.domain import holds
 from jev_cascade.jev import CountingJevClient, StubJevClient
 from jev_cascade.pipeline import TRACER_DOC_IDS, run
-from jev_cascade.rulebook import rule
+from jev_cascade.rulebook import RULEBOOK, rule
 from jev_cascade.splitter import split_document
 
 pytestmark = pytest.mark.skipif(
@@ -110,6 +110,74 @@ def test_the_reported_base_rate_matches_the_measured_corpus_order(tmp_path):
     (r1,) = result.metrics
     assert r1.base_rate is not None
     assert r1.base_rate < 0.03
+
+
+def test_the_report_states_the_corpus_filter_and_the_pacira_normalisation(tmp_path):
+    markdown = run(client=StubJevClient(), out_dir=tmp_path).markdown
+
+    assert "## Corpus" in markdown
+    # The filter that gives the set, and the two that do not.
+    assert "Document Name" in markdown
+    assert "licen" in markdown
+    assert "| CSV `Filename` contains \"licen\" | 44 |" in markdown
+    assert "| JSON `title` contains \"licen\" | 44 |" in markdown
+    # The join and the one document that needs it.
+    assert "alphanumerics" in markdown
+    assert "PACIRA" in markdown.upper()
+
+
+def test_the_report_shows_all_seven_rules_with_their_counts_and_a_passing_gate(tmp_path):
+    markdown = run(client=StubJevClient(), out_dir=tmp_path).markdown
+
+    assert "## Rulebook" in markdown
+    for rule_ in RULEBOOK:
+        assert rule_.cuad_category in markdown, rule_.id
+        assert rule_.detection_question in markdown, rule_.id
+    # The full-corpus counts, not the tracer subset: R8 at 41 documents, 85 spans, 12 certified.
+    assert "| 41 | 85 | 12 | pass |" in markdown
+    assert markdown.count("| pass |") == 7
+    # The gate is settled from CUAD spans, so it never depends on the Splitter.
+    assert "CUAD" in markdown
+
+
+def test_the_gate_is_corpus_wide_even_when_the_run_scores_one_document(tmp_path):
+    markdown = run(
+        client=StubJevClient(), doc_ids=TRACER_DOC_IDS[:1], out_dir=tmp_path
+    ).markdown
+
+    assert "| 41 | 85 | 12 | pass |" in markdown
+    assert "53 documents" in markdown
+
+
+def test_the_report_gives_the_corrected_reason_uncapped_liability_was_dropped(tmp_path):
+    markdown = run(client=StubJevClient(), out_dir=tmp_path).markdown
+
+    assert "Uncapped Liability" in markdown
+    # Dropped, so never asked as a Rule.
+    assert "## R4" not in markdown
+    assert "R4" not in markdown.split("## Rulebook")[1].split("## ")[0].split("Dropped")[0]
+    # Measured on all 53 documents, where it passes the gate by one span.
+    assert "17 documents" in markdown
+    assert "26 spans" in markdown
+    assert "not independent of R1" in markdown
+    # The reason ADR-0005 gave before Pacira joined may appear only as a superseded measurement,
+    # never as the standing reason.
+    assert "only Rule failing" not in markdown
+    assert "measured before Pacira joined" in markdown
+
+
+def test_the_report_warns_that_r5_and_r8_changed_meaning(tmp_path):
+    markdown = run(client=StubJevClient(), out_dir=tmp_path).markdown
+
+    assert "Non-Compete" in markdown
+    assert "Volume Restriction" in markdown
+
+
+def test_the_report_marks_the_detection_questions_as_drafts(tmp_path):
+    # Ticket 08 is a human checkpoint: the user approves the wording before the real run.
+    markdown = run(client=StubJevClient(), out_dir=tmp_path).markdown
+    assert "draft" in markdown.lower()
+    assert "ticket 08" in markdown.lower()
 
 
 def test_the_command_runs_and_reports_where_it_wrote(tmp_path, capsys):

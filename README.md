@@ -35,26 +35,27 @@ uv run jev-cascade --out out --from-cache   # rebuild the report from the cache;
 
 | Module | What it owns |
 | --- | --- |
-| `config.py` | The CUAD path, the output directory, prices with their source and date |
+| `config.py` | The CUAD path, the output directory, prices and cost assumptions, each with its source and date |
 | `corpus.py` | The 53-document License Agreement Set, the join, the Highlights, and the gate |
 | `splitter.py` | Partitioning a document into Clauses |
 | `rulebook.py` | The seven Rules and their Detection Questions (ADR-0005) |
 | `jev.py` | The Jev client interface and the deterministic seeded stub |
 | `runner.py` | Asking every Pair once, and the JSONL P(yes) cache |
 | `evaluator.py` | The pure metrics at one Cutoff, the Cutoff Curve and the free saving (ADR-0003) |
+| `cost.py` | What the expensive model would be asked and cost, Jev's cost and time, per 1,000 Clauses (pure; no model is called) |
 | `report.py` | Rendering the Markdown report |
 | `charts.py` | The per-Rule curve PNG and the curve CSV |
 | `pipeline.py` | The stages wired together; the CLI is a thin wrapper |
 
 ## Status
 
-Tickets 01 to 05 are built. The run scores one Rule (R1) on three documents with the stub client at
-one fixed Cutoff plus the whole Cutoff Curve, and **every figure it prints is stub-derived and carries no signal.** The report's
+Tickets 01 to 06 are built. The run scores one Rule (R1) on three documents with the stub client at
+one fixed Cutoff plus the whole Cutoff Curve, and **every figure it prints is stub-derived and carries no signal** (the cost section's full-run Jev estimate is the exception: it needs no P(yes)). The report's
 Corpus and Rulebook sections, by contrast, are counted from CUAD over all 53 documents: the seven
 Rules with their document and span counts, and the gate, which all seven pass.
 
 The remaining tickets in `.scratch/jev-cascade/issues/` deepen each stage. Ticket 03 settles the
-Splitter, 04 and 05 the metrics and the Cutoff Curve, 07 the real Jev client, and 09 runs it. Ticket 06 adds cost and time.
+Splitter, 04 and 05 the metrics and the Cutoff Curve, 06 cost and time, 07 the real Jev client, and 09 runs it.
 
 One decision is waiting on the user: **Uncapped Liability (R4) passes the gate** over all 53
 documents, at 17 documents and 26 spans. ADR-0005 dropped it partly for failing, measured before

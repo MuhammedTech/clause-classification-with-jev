@@ -266,12 +266,15 @@ two was not chased.
 | Clauses (final partition) | 3,246 |
 | Rules | 7 |
 | Jev calls | 22,722 |
-| Wall clock at ~1,200 req/min | ~20 minutes |
-| Jev cost at $0.042 per million input tokens | ~$0.20 (not recomputed) |
+| Wall clock at ~1,200 req/min | ~19 minutes |
+| Jev input tokens, Parent Lines included | ~6.4 million (estimated at 4 characters a token) |
+| Jev cost at $0.042 per million input tokens | ~$0.27 (estimated) |
 
 The 22,708 recorded earlier was 3,244 clauses times 7, so it moves with the partition: the final
-partition gives 3,246 times 7. The cost figure was not re-derived, and the 16.2% extra words from
-Parent Lines are not in it; ticket 06 counts tokens properly. The price is from one unverified
+partition gives 3,246 times 7. Ticket 06 recomputed the cost: the earlier ~$0.20 predates the Parent
+Lines, and with them the whole run is about 6.4 million input tokens, ~$0.27. The token count is an
+estimate (characters over 4, since there is no tokenizer in the code), and the report prints it
+beside its sources, so read it as an order of magnitude. The price is from one unverified
 third-party blog and must be confirmed when the key arrives.
 
 ## Reproducing these numbers

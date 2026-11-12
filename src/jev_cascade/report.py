@@ -15,7 +15,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
+from . import config
 from .corpus import GATE_MIN_DOCUMENTS, GATE_MIN_HIGHLIGHTS, CorpusFacts, RuleCounts
+from .cost import CostReport
 from .evaluator import FreeSaving, FullyBinned, RuleMetrics
 from .partition import PartitionFacts
 from .rulebook import (
@@ -59,6 +61,7 @@ class ReportInputs:
     metrics: Sequence[RuleMetrics]
     fully_binned: FullyBinned
     curves: Sequence[RuleCurve]
+    cost: CostReport
     stats: RunStats
     cutoff: float
     model_version: str
@@ -322,6 +325,172 @@ def _summary_section(inputs: ReportInputs) -> list[str]:
         f"({_format_share(fully.clause_share)}) are Binned for every Rule asked in this run "
         f"({asked} Rule{'s' if asked != 1 else ''}). It is the only saving that turns into money, "
         "and the per-Rule Binned Share above does not combine into it."
+    )
+    lines.append("")
+    return lines
+
+
+def _usd(value: float | None) -> str:
+    """Dollars to three places, because Jev's part is a few cents per 1,000 Clauses."""
+    if value is None:
+        return "n/a"
+    sign = "-" if value < 0 else ""
+    return f"{sign}${abs(value):,.3f}"
+
+
+def _sourced_row(label: str, item: config.Sourced, shown: str) -> str:
+    return f"| {label} | {shown} | {item.unit} | {item.source} | {item.as_of} |"
+
+
+def _cost_section(inputs: ReportInputs) -> list[str]:
+    """What the cascade would save and how long Jev takes, estimated from token counts."""
+    cost = inputs.cost
+    usage = cost.usage
+    asked = usage.rules
+    rules = f"{asked} Rule{'s' if asked != 1 else ''}"
+    lines = [
+        "## Cost and time",
+        "",
+        "How much the cascade could save, and how fast Jev is, per 1,000 Clauses. No expensive "
+        "model is run, so every dollar figure is an **estimate** from token counts at list "
+        "prices, and the token counts are themselves estimated from character length (there is "
+        "no tokenizer in the code). Treat the figures as an order of magnitude, not a quote.",
+        "",
+        f"Priced over this run's {usage.clauses:,} Clauses and {rules}, then scaled to 1,000. "
+        "The baseline is the expensive model alone: one call per Clause carrying every Rule "
+        "asked. The cascade's expensive part is one call per Clause Escalated for at least one "
+        "Rule, sized to only its Escalated questions; a Fully Binned Clause gets no call. Jev is "
+        "charged for every Pair at input price, and is not batched.",
+        "",
+    ]
+    lines.extend(_stub_label(inputs))
+
+    header = ["Per 1,000 Clauses"]
+    for model, batch, _ in cost.figures:
+        header.append(f"{model.name} batch" if batch else model.name)
+    lines.append("| " + " | ".join(header) + " |")
+    lines.append("| " + " | ".join(["---"] * len(header)) + " |")
+
+    def figure_row(label: str, pick) -> None:
+        cells = [_usd(f.per_1000(pick(f))) for _, _, f in cost.figures]
+        lines.append(f"| {label} | " + " | ".join(cells) + " |")
+
+    figure_row("Expensive model alone", lambda f: f.alone_usd)
+    figure_row("Cascade: expensive part", lambda f: f.cascade_usd)
+    figure_row("Cascade: Jev part", lambda f: f.jev_usd)
+    figure_row("Net savings", lambda f: f.net_usd)
+    shares = [
+        _format_share(f.net_usd / f.alone_usd) if f.alone_usd else "n/a"
+        for _, _, f in cost.figures
+    ]
+    lines.append("| Saved, share of the baseline | " + " | ".join(shares) + " |")
+    lines.append("")
+
+    lines.append(
+        "Net savings are the baseline less the cascade's expensive part less Jev, so they can be "
+        "negative. **Savings track the Fully Binned Clause share, not per-Rule Binned Share**: "
+        f"{_count_pair(usage.fully_binned_clauses, usage.clauses)} Clauses "
+        f"({_format_share(inputs.fully_binned.clause_share)}) are Fully Binned here, and a Clause "
+        "Binned for all but one Rule still costs a call."
+    )
+    lines.append("")
+
+    lines.append("| Calls and tokens | Calls | Input tokens | Output tokens |")
+    lines.append("| --- | --- | --- | --- |")
+    for label, totals in (
+        ("Expensive calls, model alone", usage.alone),
+        ("Cascade expensive calls", usage.cascade),
+        ("Jev calls", usage.jev),
+    ):
+        lines.append(
+            f"| {label} | {totals.calls:,} | {totals.input_tokens:,} | {totals.output_tokens:,} |"
+        )
+    lines.append("")
+    lines.append(
+        "The expensive model's output tokens are counted, at the assumed output per question "
+        "asked below. Jev's answer is one probability, so its output is taken as free."
+    )
+    lines.append("")
+
+    time = cost.time
+    if time.seconds_per_1000_clauses is None:
+        measured = "n/a (every answer came from the cache, so no Jev call was timed)"
+    else:
+        stub = " (stub timing)" if inputs.is_stub else ""
+        measured = f"{time.seconds_per_1000_clauses:,.1f}s{stub}"
+    lines.append("### Jev time")
+    lines.append("")
+    if inputs.is_stub:
+        lines.append(
+            "_Stub timing: the stub answers instantly, so the measured figure says nothing about "
+            "Jev's latency._"
+        )
+        lines.append("")
+    lines.append("| Per 1,000 Clauses | |")
+    lines.append("| --- | --- |")
+    lines.append(f"| Jev calls | {time.calls_per_1000_clauses:,} |")
+    lines.append(f"| Jev wall clock, measured | {measured} |")
+    lines.append(
+        f"| Jev time at the published rate limit | "
+        f"{time.minutes_per_1000_clauses_at_rate_limit:,.2f} minutes "
+        f"({time.calls_per_1000_clauses:,} calls at "
+        f"{config.JEV_RATE_LIMIT_PER_MINUTE.value:,.0f} a minute) |"
+    )
+    lines.append("")
+
+    full = cost.full_run
+    lines.append("### The full run")
+    lines.append("")
+    lines.append(
+        "Asking Jev every Pair of the whole corpus, no expensive model, counted from the "
+        "documents with their Parent Lines. Not stub-derived: it needs no P(yes). It replaces "
+        "the roughly $0.20 the spec carried, which was never recomputed after Parent Lines added "
+        "about 16% more words per call."
+    )
+    lines.append("")
+    lines.append("| | |")
+    lines.append("| --- | --- |")
+    lines.append(f"| Clauses, all 53 documents | {full.clauses:,} |")
+    lines.append(f"| Rules in the Rulebook | {full.rules} |")
+    lines.append(f"| Jev calls for the full run | {full.calls:,} |")
+    lines.append(f"| Jev input tokens, estimated | {full.jev_input_tokens:,} |")
+    lines.append(f"| Jev cost, estimated | {_usd(full.jev_usd)} |")
+    lines.append(
+        f"| Full run time at the published rate limit | {full.minutes_at_rate_limit:,.1f} minutes |"
+    )
+    lines.append("")
+
+    lines.append("### Prices and assumptions")
+    lines.append("")
+    lines.append(
+        "Every number the cost model uses, from `config.py`. The last three are assumptions, not "
+        "prices; the output per question is the softest number in the table."
+    )
+    lines.append("")
+    lines.append("| Item | Value | Unit | Source | As of |")
+    lines.append("| --- | --- | --- | --- | --- |")
+    for model in config.EXPENSIVE_MODELS:
+        lines.append(_sourced_row(f"{model.name} input", model.input, f"${model.input.value:g}"))
+        lines.append(_sourced_row(f"{model.name} output", model.output, f"${model.output.value:g}"))
+    priced = (
+        ("Batch discount", config.BATCH_DISCOUNT, "{:g}"),
+        ("Jev input price", config.JEV_INPUT_PRICE, "${:g}"),
+        ("Jev rate limit", config.JEV_RATE_LIMIT_PER_MINUTE, "{:,.0f}"),
+        ("Characters per token", config.CHARS_PER_TOKEN, "{:g}"),
+        ("Expensive call overhead", config.EXPENSIVE_OVERHEAD_TOKENS, "{:,.0f}"),
+        (
+            "Expensive output per question",
+            config.EXPENSIVE_OUTPUT_TOKENS_PER_QUESTION,
+            "{:,.0f}",
+        ),
+    )
+    for label, item, template in priced:
+        lines.append(_sourced_row(label, item, template.format(item.value)))
+    lines.append("")
+    lines.append(
+        "Jev's tokenizer and Claude's differ, so one characters-per-token figure covers both only "
+        "roughly. The baseline and the cascade share every assumption, so the share saved is "
+        "steadier than the dollars."
     )
     lines.append("")
     return lines
@@ -630,6 +799,8 @@ def render(inputs: ReportInputs) -> str:
         f"words | {_format_share(fully.word_share)} |"
     )
     lines.append("")
+
+    lines.extend(_cost_section(inputs))
 
     lines.extend(_reading_section(inputs))
 

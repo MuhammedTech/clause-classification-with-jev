@@ -16,6 +16,7 @@ from typing import Mapping, Sequence
 from . import config
 from .charts import write_curve_chart, write_curve_csv
 from .corpus import corpus_facts, load_corpus
+from .cost import CostReport, build_cost_report
 from .domain import Clause, Highlight
 from .evaluator import (
     ClauseKey,
@@ -29,7 +30,7 @@ from .evaluator import (
 from .jev import JevClient, StubJevClient
 from .partition import partition_facts
 from .report import DocumentSummary, ReportInputs, RuleCurve, render
-from .rulebook import Rule, rule
+from .rulebook import RULEBOOK, Rule, rule
 from .runner import PYesTable, RunStats, run_pairs
 from .splitter import split_document
 
@@ -60,6 +61,7 @@ class RunResult:
     metrics: tuple[RuleMetrics, ...]
     fully_binned: FullyBinned
     curves: tuple[RuleCurve, ...]
+    cost: CostReport
     p_yes: PYesTable
     stats: RunStats
     clauses: tuple[Clause, ...]
@@ -153,12 +155,31 @@ def run(
         for r in rules
     )
 
+    # Corpus-wide, for sizing the whole run: every document split, with no Jev call. The partition
+    # section reads the same loaded documents, so the corpus is loaded once for both.
+    corpus_documents = load_corpus(directory=cuad_directory)
+    corpus_clauses = [
+        clause
+        for document in corpus_documents
+        for clause in split_document(document.doc_id, document.text)
+    ]
+    cost = build_cost_report(
+        clauses=clauses,
+        p_yes_by_rule=table,
+        questions={r.id: r.detection_question for r in rules},
+        cutoff=cutoff,
+        stats=stats,
+        corpus_clauses=corpus_clauses,
+        all_questions={r.id: r.detection_question for r in RULEBOOK},
+    )
+
     markdown = render(
         ReportInputs(
             rules=rules,
             metrics=metrics,
             fully_binned=fully,
             curves=curves,
+            cost=cost,
             stats=stats,
             cutoff=cutoff,
             model_version=client.model_version,
@@ -169,7 +190,7 @@ def run(
             corpus=corpus_facts(directory=cuad_directory),
             # Also corpus-wide: every document is split, with all seven Rules' Highlights, so a
             # document this run did not score still shows how well it partitions. No Jev calls.
-            partition=partition_facts(load_corpus(directory=cuad_directory)),
+            partition=partition_facts(corpus_documents),
         )
     )
 
@@ -183,6 +204,7 @@ def run(
         metrics=metrics,
         fully_binned=fully,
         curves=curves,
+        cost=cost,
         p_yes=table,
         stats=stats,
         clauses=tuple(clauses),

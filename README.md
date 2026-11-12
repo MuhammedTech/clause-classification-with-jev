@@ -50,7 +50,9 @@ uv run jev-cascade --out out --from-cache   # rebuild the report from the cache;
 ## Status
 
 Tickets 01 to 06 are built. The run scores one Rule (R1) on three documents with the stub client at
-one fixed Cutoff plus the whole Cutoff Curve, and **every figure it prints is stub-derived and carries no signal** (the cost section's full-run Jev estimate is the exception: it needs no P(yes)). The report's
+one fixed Cutoff plus the whole Cutoff Curve, and **every figure it prints is stub-derived and
+carries no signal** (the cost section's full-run Jev estimate is the exception: it needs no P(yes)).
+The report's
 Corpus and Rulebook sections, by contrast, are counted from CUAD over all 53 documents: the seven
 Rules with their document and span counts, and the gate, which all seven pass.
 

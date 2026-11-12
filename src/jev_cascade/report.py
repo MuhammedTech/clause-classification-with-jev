@@ -334,6 +334,8 @@ def _usd(value: float | None) -> str:
     """Dollars to three places, because Jev's part is a few cents per 1,000 Clauses."""
     if value is None:
         return "n/a"
+    # Round first, so a saving of -$0.0001 prints as $0.000 and not as "-$0.000".
+    value = round(value, 3)
     sign = "-" if value < 0 else ""
     return f"{sign}${abs(value):,.3f}"
 
@@ -395,6 +397,7 @@ def _cost_section(inputs: ReportInputs) -> list[str]:
     )
     lines.append("")
 
+    lines.extend(_stub_label(inputs))
     lines.append("| Calls and tokens | Calls | Input tokens | Output tokens |")
     lines.append("| --- | --- | --- | --- |")
     for label, totals in (
@@ -443,14 +446,12 @@ def _cost_section(inputs: ReportInputs) -> list[str]:
     lines.append("")
     lines.append(
         "Asking Jev every Pair of the whole corpus, no expensive model, counted from the "
-        "documents with their Parent Lines. Not stub-derived: it needs no P(yes). It replaces "
-        "the roughly $0.20 the spec carried, which was never recomputed after Parent Lines added "
-        "about 16% more words per call."
+        "documents with their Parent Lines. Not stub-derived: it needs no P(yes)."
     )
     lines.append("")
     lines.append("| | |")
     lines.append("| --- | --- |")
-    lines.append(f"| Clauses, all 53 documents | {full.clauses:,} |")
+    lines.append(f"| Clauses, all {inputs.corpus.documents} documents | {full.clauses:,} |")
     lines.append(f"| Rules in the Rulebook | {full.rules} |")
     lines.append(f"| Jev calls for the full run | {full.calls:,} |")
     lines.append(f"| Jev input tokens, estimated | {full.jev_input_tokens:,} |")

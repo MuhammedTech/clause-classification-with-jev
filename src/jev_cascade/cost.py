@@ -176,10 +176,14 @@ class CostFigures:
         return usd * CLAUSES_PER_THOUSAND / self.clauses
 
 
+def _dollars(tokens: int, usd_per_million: float) -> float:
+    return tokens * usd_per_million / TOKENS_PER_MILLION
+
+
 def _expensive_usd(totals: CallTotals, model: config.ExpensiveModel, factor: float) -> float:
-    dollars = (
-        totals.input_tokens * model.input.value + totals.output_tokens * model.output.value
-    ) / TOKENS_PER_MILLION
+    dollars = _dollars(totals.input_tokens, model.input.value) + _dollars(
+        totals.output_tokens, model.output.value
+    )
     return dollars * factor
 
 
@@ -200,7 +204,7 @@ def price_usage(
         clauses=usage.clauses,
         alone_usd=_expensive_usd(usage.alone, model, factor),
         cascade_usd=_expensive_usd(usage.cascade, model, factor),
-        jev_usd=usage.jev.input_tokens * jev_input_per_mtok / TOKENS_PER_MILLION,
+        jev_usd=_dollars(usage.jev.input_tokens, jev_input_per_mtok),
     )
 
 
@@ -219,7 +223,9 @@ def jev_time(stats: RunStats, rules_asked: int, rate_limit_per_minute: float) ->
     """Scale the runner's timing to 1,000 Clauses.
 
     Seconds a call, times the Rules asked, times 1,000: the same arithmetic whether the run made
-    every call or only the ones missing from the cache.
+    every call or only the ones missing from the cache. The runner's clock also covers the cache
+    write after each call and the cache hits, which are negligible beside a network call but are in
+    the figure.
     """
     calls = rules_asked * CLAUSES_PER_THOUSAND
     seconds = None
@@ -265,7 +271,7 @@ def full_run_estimate(
         rules=len(questions),
         calls=totals.calls,
         jev_input_tokens=totals.input_tokens,
-        jev_usd=totals.input_tokens * jev_input_per_mtok / TOKENS_PER_MILLION,
+        jev_usd=_dollars(totals.input_tokens, jev_input_per_mtok),
         minutes_at_rate_limit=totals.calls / rate_limit_per_minute,
     )
 

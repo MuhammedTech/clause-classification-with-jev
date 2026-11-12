@@ -53,6 +53,11 @@ _LINE_START_MARKER = re.compile(rf"^(?={ITEM_MARKER.pattern})", re.VERBOSE | re.
 #: '1.49 "Field" means the treatment of HIV in humans.' is a Clause in its own right.
 HEADING_MAX_WORDS = 8
 
+#: The **Word Ceiling**: no Clause may exceed this many words, counted by `str.split` as
+#: `Clause.word_count` does. 600 is the figure ADR-0004 and `docs/cuad-ground-truth.md` measure the
+#: oversized Clauses against. It is a ceiling, so a Clause of exactly 600 words stands.
+WORD_CEILING = 600
+
 
 @dataclass(frozen=True)
 class _Region:
@@ -180,41 +185,190 @@ class _Piece:
     parent_line: str
 
 
+def _leading_number(marker: str) -> str:
+    """The first integer of a numbered marker: `7` for `7.2`, `7.2.` and `7.`."""
+    match = re.match(r"\d+", marker.strip())
+    return match.group(0) if match else ""
+
+
+def _parent_text(region: _Region, candidate: _Region | None) -> str:
+    """The line `region` sits under, given the nearest shallower marked region above it.
+
+    A lettered item sits under whatever shallower item holds it. A **numbered** item only does when
+    the numbering agrees: `6.2` sits under `6.`, but `7.2` after a missing `7.` does not, because
+    the nearest shallower item is then `6. Term and Termination.` and naming it would stamp the
+    wrong section onto the Clause. Measured over the corpus, the depth rule alone picked a parent
+    with a different leading number for 301 of 666 numbered items under a numbered ancestor. A wrong
+    section label is worse than none, so those get an empty Parent Line.
+    """
+    if candidate is None:
+        return ""
+    if not region.marker.strip().startswith("("):  # type: ignore[union-attr]
+        if candidate.marker is None or candidate.marker.strip().startswith("("):
+            return ""
+        if _leading_number(region.marker) != _leading_number(candidate.marker):  # type: ignore[arg-type]
+            return ""
+    return candidate.first_line
+
+
+def _parent_lines(regions: list[_Region]) -> list[str]:
+    """The Parent Line of every region: the line it sits one level under, never a sibling.
+
+    Walks the regions with a stack of the open items. Entering a region closes every open item at
+    its depth or deeper, so what is left on top is the nearest shallower item, which is the line
+    this one sits under. The unmarked opening has depth 0 and is never anyone's parent.
+    """
+    parents: list[str] = []
+    stack: list[_Region] = []
+    for region in regions:
+        if region.marker is None:
+            parents.append("")
+            continue
+        while stack and stack[-1].depth >= region.depth:
+            stack.pop()
+        parents.append(_parent_text(region, stack[-1] if stack else None))
+        stack.append(region)
+    return parents
+
+
 def _merge_headings(regions: list[_Region]) -> list[_Piece]:
-    """Give each heading's words to the first Clause beneath it."""
+    """Give each heading's words to the first Clause beneath it, and assign Parent Lines.
+
+    A merged Clause takes the Parent Line of its **heading**, not the heading itself: the heading's
+    words are already in the Clause, so naming it again would only repeat them.
+    """
+    parents = _parent_lines(regions)
     pieces: list[_Piece] = []
-    pending_heading: _Region | None = None
+    pending_heading: int | None = None
 
     for index, region in enumerate(regions):
         if _is_heading(regions, index):
-            pending_heading = region
+            pending_heading = index
             continue
-        start = pending_heading.start if pending_heading is not None else region.start
+        first = pending_heading if pending_heading is not None else index
         pending_heading = None
-        pieces.append(_Piece(start=start, end=region.end, parent_line=""))
+        pieces.append(
+            _Piece(start=regions[first].start, end=region.end, parent_line=parents[first])
+        )
 
     if pending_heading is not None:
         # A heading with nothing below it: the document ends on it. It keeps its own Clause.
+        heading = regions[pending_heading]
         pieces.append(
-            _Piece(start=pending_heading.start, end=pending_heading.end, parent_line="")
+            _Piece(start=heading.start, end=heading.end, parent_line=parents[pending_heading])
         )
     return pieces
 
 
-def _parent_line(text: str, start: int) -> str:
-    """The line a Clause sits under, as context for Jev. Never used in grading."""
-    for line in reversed(text[:start].splitlines()):
-        if line.strip():
-            return line.strip()
-    return ""
+#: Where an oversized Clause may be cut, tried in this order and recursing a lone oversized
+#: segment to the next. Each pattern's match end is the cut, so a separator stays with the text
+#: before it and the pieces still concatenate to the original.
+#:
+#: The first two are the paragraph breaks ADR-0004 asks for. The last two exist because a paragraph
+#: break is not always there: newlines in the CUAD `context` sit at page boundaries, and in some
+#: documents a whole page is one line with nothing to cut at. Sentence ends and then any
+#: whitespace guarantee the ceiling is reached, since the last level cuts after every word.
+_CUT_LEVELS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\n[ \t]*\n\s*"),  # a blank line: a paragraph break
+    re.compile(r"\n\s*"),  # any line break
+    re.compile(r"(?<=[.;:!?])\s+"),  # the end of a sentence or a semicolon clause
+    re.compile(r"\s+"),  # between any two words
+)
 
 
-def split_document(doc_id: str, text: str) -> tuple[Clause, ...]:
-    """Partition one document into Clauses in reading order."""
+def _word_count(text: str, start: int, end: int) -> int:
+    """Words by `str.split`, the same count `Clause.word_count` uses."""
+    return len(text[start:end].split())
+
+
+def _segments(text: str, start: int, end: int, pattern: re.Pattern[str]) -> list[tuple[int, int]]:
+    """Cut `[start, end)` after every match of `pattern`, never leaving a blank segment.
+
+    A segment with no words is joined to the one after it, or to the one before it when it is last,
+    so no piece of a split is empty or whitespace-only.
+    """
+    cuts = [m.end() for m in pattern.finditer(text, start, end) if start < m.end() < end]
+    bounds = [start, *cuts, end]
+    segments: list[tuple[int, int]] = []
+    carried: int | None = None
+    for left, right in zip(bounds, bounds[1:]):
+        if carried is not None:
+            left, carried = carried, None
+        if not text[left:right].strip():
+            carried = left
+            continue
+        segments.append((left, right))
+    if carried is not None:
+        if segments:
+            segments[-1] = (segments[-1][0], end)
+        else:
+            segments = [(start, end)]
+    return segments
+
+
+def _split_oversized(
+    text: str, start: int, end: int, ceiling: int, level: int = 0
+) -> list[tuple[int, int]]:
+    """Cut `[start, end)` into spans of at most `ceiling` words, as few and as large as possible.
+
+    Segments are packed greedily at the current cut level. A single segment that is itself over
+    the ceiling is recursed to the next level, so a block with no paragraph break falls through to
+    sentences and then to words.
+    """
+    if _word_count(text, start, end) <= ceiling:
+        return [(start, end)]
+    if level >= len(_CUT_LEVELS):  # pragma: no cover - the last level cuts after every word
+        return [(start, end)]
+
+    segments = _segments(text, start, end, _CUT_LEVELS[level])
+    if len(segments) == 1:
+        return _split_oversized(text, start, end, ceiling, level + 1)
+
+    spans: list[tuple[int, int]] = []
+    run_start: int | None = None
+    run_words = 0
+    for left, right in segments:
+        words = _word_count(text, left, right)
+        if words > ceiling:
+            if run_start is not None:
+                spans.append((run_start, left))
+                run_start, run_words = None, 0
+            spans.extend(_split_oversized(text, left, right, ceiling, level + 1))
+            continue
+        if run_start is not None and run_words + words > ceiling:
+            spans.append((run_start, left))
+            run_start, run_words = None, 0
+        if run_start is None:
+            run_start = left
+        run_words += words
+    if run_start is not None:
+        spans.append((run_start, end))
+    return spans
+
+
+def _split_pieces(text: str, pieces: list[_Piece], ceiling: int) -> list[_Piece]:
+    """Split every piece over the word ceiling. A continuation keeps the whole Clause's Parent Line.
+
+    A continuation is not a new item, so it sits under the same line the whole Clause did. It does
+    not take its own first line as one: that would be a mid-sentence fragment.
+    """
+    result: list[_Piece] = []
+    for piece in pieces:
+        for start, end in _split_oversized(text, piece.start, piece.end, ceiling):
+            result.append(_Piece(start=start, end=end, parent_line=piece.parent_line))
+    return result
+
+
+def split_document(
+    doc_id: str, text: str, word_ceiling: int = WORD_CEILING
+) -> tuple[Clause, ...]:
+    """Partition one document into Clauses in reading order, none over `word_ceiling` words."""
+    if word_ceiling < 1:
+        raise ValueError(f"word_ceiling must be at least 1, got {word_ceiling}")
     if not text:
         return ()
 
-    pieces = _merge_headings(_regions(text))
+    pieces = _split_pieces(text, _merge_headings(_regions(text)), word_ceiling)
 
     return tuple(
         Clause(
@@ -223,7 +377,7 @@ def split_document(doc_id: str, text: str) -> tuple[Clause, ...]:
             start=piece.start,
             end=piece.end,
             text=text[piece.start : piece.end],
-            parent_line=_parent_line(text, piece.start),
+            parent_line=piece.parent_line,
         )
         for index, piece in enumerate(pieces)
     )

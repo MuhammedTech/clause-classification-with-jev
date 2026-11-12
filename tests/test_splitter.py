@@ -1,10 +1,9 @@
 """Seam B, the Splitter: the Clauses must partition the document.
 
-Ticket 01 only needs line-start markers. The word ceiling and the heading rules land in ticket 03,
-so the cases here are the partition guarantee and the marker basics.
+The partition guarantee, the marker basics and the heading rule. Parent Lines on real excerpts and
+the word ceiling are in `test_splitter_excerpts.py`, and the corpus-wide guarantees in
+`test_partition.py`.
 """
-
-import pytest
 
 from jev_cascade.splitter import ITEM_MARKER, split_document
 
@@ -67,15 +66,9 @@ def test_a_lettered_list_takes_the_line_above_as_its_parent_line():
     assert lettered[0].parent_line == "2. Licensee commits to:"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Ticket 03 owns marker nesting. The interim rule takes the last non-empty line above, "
-        "which for (b) is its sibling (a). A Parent Line is the line a Clause sits under, one "
-        "level only (GLOSSARY, ADR-0004), so a sibling is never one."
-    ),
-    strict=True,
-)
 def test_a_sibling_item_is_not_a_parent_line():
+    # A Parent Line is the line a Clause sits under, one level only (GLOSSARY, ADR-0004), so a
+    # sibling is never one. `(b)` sits under the numbered item, not under `(a)`.
     text = "2. Licensee commits to:\n(a) pay the fees.\n(b) report quarterly.\n"
     clauses = split_document("D", text)
     second = [c for c in clauses if c.text.lstrip().startswith("(b)")][0]

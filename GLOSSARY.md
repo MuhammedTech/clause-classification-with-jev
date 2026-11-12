@@ -1,46 +1,69 @@
 # Clause Classification with Jev
 
-Measures how much contract-review work Jev, a decision model, can take off an expensive model, and how accurate it is against lawyer labels, per rule, on CUAD license agreements.
+Measures how much contract-review work Jev, a cheap decision model, can take off an expensive model,
+and how accurate it is against lawyer labels, per rule, on CUAD license agreements.
+
+Decisions behind this vocabulary: [ADR-0001](docs/adr/0001-jev-only-evaluation.md) (Jev only),
+[ADR-0003](docs/adr/0003-recall-precision-on-one-cutoff.md) (how grading works),
+[ADR-0004](docs/adr/0004-document-partition-into-clauses.md) (what a Clause is),
+[ADR-0005](docs/adr/0005-seven-rules-one-question-each.md) (the Rulebook). Measured facts about the
+data are in [docs/cuad-ground-truth.md](docs/cuad-ground-truth.md).
 
 ## Language
 
 ### Corpus
 
 **License Agreement Set**:
-The 53 CUAD v1 documents whose CSV `Document Name` contains "licen", including Pacira (whose name differs between the CSV and the JSON).
-_Avoid_: license docs, the 52, the 44
+The 53 CUAD v1 documents whose CSV `Document Name` contains "licen". Joining them to the annotation
+JSON needs the filename compared on alphanumerics only, which is what matches Pacira's "A&R" to its
+"A_R".
+_Avoid_: license docs, the 52, the 44 (the 44 is the `Filename` column, a different filter)
 
 **Clause**:
 A numbered or lettered item of a contract (`1.`, `1.1`, `(a)`), the unit every judgement is made on.
+Clauses **partition** the document: every character belongs to exactly one.
 _Avoid_: chunk, window, segment, passage
 
 **Highlight**:
-A span of contract text a CUAD lawyer marked as an instance of a CUAD category.
+A span of contract text a CUAD lawyer marked as an instance of a CUAD category. The only ground truth
+there is.
 _Avoid_: annotation, answer, span
+
+**Parent Line**:
+The introductory line a Clause sits under ("Licensee commits to:"), or its section heading. Shown to
+Jev as context, never used in grading. One level only.
+_Avoid_: lead-in, header, intro, stem
 
 ### Rules and labels
 
 **Rule**:
-One of the rulebook's detection questions about a clause, each mapped to one CUAD category.
+One of the Rulebook's seven detection questions about a Clause, each mapped to one CUAD category.
 _Avoid_: check, criterion, category (when meaning the rule)
 
 **Rulebook**:
-The fixed set of rules the experiment scores.
+The fixed set of seven Rules the experiment scores.
 
 **Detection Question**:
-The yes/no question asked of a clause for one rule: "does this clause contain X?"
-_Avoid_: compliance question, verdict
+The single positively phrased yes/no question asked of a Clause for one Rule. Positive phrasing means
+a high P(yes) always means "relevant".
+_Avoid_: compliance question, verdict, sub-question
 
-**Touch**:
-A clause touches a highlight when they share any text, or when the clause sits directly under a lead-in that is itself the whole highlight.
-_Avoid_: overlap threshold, present, contains
+**Holds**:
+A Clause holds a Highlight when their character ranges overlap by one character or more. Pure
+arithmetic, no threshold.
+_Avoid_: touch, overlap threshold, present, contains
 
-**Lead-in**:
-The introductory line of a clause that has lettered or numbered items under it ("Licensee commits to:").
-_Avoid_: header, intro, stem
+**Certified Negative**:
+A Clause holding nothing, in a document CUAD flags `is_impossible` for that Rule, meaning lawyers
+checked and the contract has no such clause anywhere. A verified negative.
+
+**Inferred Negative**:
+A Clause holding nothing, in a document that does have Highlights for that Rule elsewhere. Strong
+evidence, resting on the annotators having been exhaustive within the document.
 
 **Compliance Reading**:
-A document-level interpretation of detections against the licensee's position (e.g. "has a non-compete → violates R5"); outside the scored experiment.
+A document-level interpretation against the licensee's position ("has a non-compete, so violates R5");
+outside the scored experiment.
 
 ### Jev
 
@@ -49,55 +72,77 @@ A decision model that, given a question and a fixed answer set, returns one answ
 _Avoid_: classifier, the model, LLM
 
 **P(yes)**:
-The probability Jev returns that a pair's detection question is answered yes.
+The probability Jev returns that a Clause's Detection Question is answered yes.
 _Avoid_: confidence, score, certainty
 
 ### Cascade
 
 **Pair**:
-One clause judged against one rule; the unit every outcome is counted on.
+One Clause judged against one Rule; the unit every outcome is counted on.
 
-**Lower Cutoff**:
-The P(yes) at or below which Jev's "no" for a rule is kept; it governs missed highlights.
-_Avoid_: threshold (in prose), gate
+**Cutoff**:
+The P(yes) at or below which a Clause is Binned. One per Rule. In plain speech, "the line". It is a
+discard-risk threshold, **not** a yes/no threshold: a Clause just above it is a weak "no" we do not
+trust enough to act on.
+_Avoid_: threshold (in prose), gate, lower cutoff, upper cutoff
 
-**Upper Cutoff**:
-The P(yes) at or above which Jev's "yes" for a rule is kept; it governs false alarms.
-_Avoid_: threshold (in prose), gate
-
-**Kept**:
-A pair whose P(yes) is at or below the lower cutoff or at or above the upper cutoff, so Jev's answer stands and the expensive model never sees it.
-_Avoid_: accepted, auto-decided
+**Binned**:
+A Pair whose P(yes) is at or below the Cutoff. The Clause is discarded and nobody reads it again. The
+only place work is saved.
+_Avoid_: kept, skipped, cleared, accepted
 
 **Escalated**:
-A pair whose P(yes) lies between the two cutoffs, so it would go to the expensive model; never scored for accuracy.
-_Avoid_: routed, deferred, abstained
+A Pair above the Cutoff, so the Clause goes to the expensive model. Being Escalated is not a detection;
+it means Jev could not rule the Clause out.
+_Avoid_: kept, routed, deferred, flagged
 
-**Fully Cleared Clause**:
-A clause whose pairs are kept for every rule, so the expensive model would never be called on it.
+**Binned Share**:
+The share of contract **words** Binned for a Rule. The saving, measured in text rather than unit count
+so it does not depend on where the splitter cuts.
+_Avoid_: keep share, coverage, automation rate
 
-**Keep Share**:
-The share of contract tokens whose pairs for a rule are kept; the work Jev takes off the expensive model, measured in text rather than unit count.
-_Avoid_: coverage, automation rate
+**Fully Binned Clause**:
+A Clause Binned for every Rule, so the expensive model is never called on it. The only figure that
+turns into money; per-Rule Binned Share does not combine into it.
+_Avoid_: fully cleared clause
 
-**Found Highlight**:
-A highlight with at least one touching clause kept as "yes".
-_Avoid_: catch, true positive (in prose), hit
+**Lost Provision**:
+A Highlight whose every holding Clause was Binned, so nobody will ever look at it. The only failure
+the evaluation counts as permanent.
+_Avoid_: missed highlight, miss, false negative (in prose), leak
 
-**Pending Highlight**:
-A highlight with no touching clause kept as "yes" but at least one escalated; it waits on the expensive model.
+**Clause Recall**:
+Of Clauses that hold a Highlight for a Rule, the share Escalated.
 
-**Missed Highlight**:
-A highlight whose every touching clause is kept as "no"; a provision nobody will look at.
-_Avoid_: miss (of a clause), false negative (in prose), leak
+**Provision Recall**:
+Of Highlights for a Rule, the share with at least one holding Clause Escalated. Always at least Clause
+Recall; the two diverge only on the ~3% of Highlights spanning several Clauses.
 
-**False Alarm**:
-A clause kept as "yes" that touches no highlight of that rule.
-_Avoid_: false positive (in prose)
+**Precision**:
+Of Clauses Escalated for a Rule, the share that hold a Highlight. Measures the expensive model's
+wasted reading, not wrong final answers. At a ~1% base rate it reads in single digits by arithmetic.
+_Avoid_: false positive rate, accuracy
 
-**Miss Rate**:
-Missed highlights as a share of all highlights for a rule.
+**Cutoff Curve**:
+The table of Clause Recall, Provision Recall, Precision, Lost Provisions and Binned Share at every
+observed P(yes) for a Rule. The result of the experiment. Nothing is fitted, so nothing can overfit.
+_Avoid_: operating point, tuned cutoff, ROC
 
-**Fold**:
-One of five fixed groups of documents; a fold is always reported with a cutoff tuned on the other four.
-_Avoid_: split, half
+## Retired terms
+
+These appear in `docs/adr/0002-*` and in older notes. They are gone, and two of them inverted, so do
+not reuse them.
+
+| Retired | Why |
+| --- | --- |
+| Lower Cutoff / Upper Cutoff | One Cutoff now; see ADR-0003 |
+| Kept / Keep Share | **Inverted.** "Kept" used to mean Jev's answer stands and the text is discarded. That is now **Binned**, and "Escalated" is its opposite |
+| Found Highlight / Pending Highlight | No longer distinguished; a Highlight is either Lost or it is not |
+| False Alarm | Replaced by Precision, plus the false-alarm rate on Certified Negative documents |
+| Fold | No cross-fitting, because nothing is tuned |
+| Miss Rate | Use Lost Provisions with its count, or Provision Recall |
+| Fully Cleared Clause | Renamed Fully Binned Clause to match Binned |
+| Touch | Renamed Holds |
+| Lead-in | Renamed Parent Line, and the lead-in touch rule is dropped (ADR-0004) |
+| Sub-question | Dropped; one question per Rule (ADR-0005) |
+| Uncapped Liability / R4 | Dropped; the only Rule failing the gate (ADR-0005) |

@@ -191,3 +191,18 @@ def test_clauses_and_highlights_are_not_pooled_across_documents():
     assert m.clauses == 2
     assert m.holding_clauses == 1
     assert m.precision == pytest.approx(0.5)
+
+
+def test_a_hand_made_document_labels_a_one_character_overlap_as_holding():
+    # The ticket asks for this through the Evaluator, not only through holds(): a Clause
+    # overlapping a Highlight by one character holds it, and the Clause next door does not.
+    clauses = [make_clause(0, 0, 10, "first"), make_clause(1, 10, 20, "second")]
+    pyes = {("D", "0-10"): 0.9, ("D", "10-20"): 0.9}
+
+    # [9, 14) takes the last character of C0 and the first four of C1.
+    m = evaluate_rule("R1", clauses, [make_highlight(9, 14)], pyes, 0.5)
+    assert m.holding_clauses == 2
+
+    # Pulled forward by one character, [10, 14) no longer touches C0.
+    m = evaluate_rule("R1", clauses, [make_highlight(10, 14)], pyes, 0.5)
+    assert m.holding_clauses == 1

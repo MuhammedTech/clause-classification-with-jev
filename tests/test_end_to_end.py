@@ -120,3 +120,13 @@ def test_the_command_runs_and_reports_where_it_wrote(tmp_path, capsys):
     assert "Wrote" in captured
     assert (tmp_path / "report.md").exists()
     assert (tmp_path / "pyes.jsonl").exists()
+
+
+def test_running_the_command_twice_reports_zero_jev_calls(tmp_path, capsys):
+    # The ticket's "a second run makes zero client calls", asked of the command itself rather
+    # than of run().
+    assert main(["--out", str(tmp_path)]) == 0
+    assert "0 Jev calls" not in capsys.readouterr().out
+
+    assert main(["--out", str(tmp_path)]) == 0
+    assert "0 Jev calls" in capsys.readouterr().out

@@ -94,10 +94,10 @@ From a naive partition of the 53 documents at line-start item markers: **3,244 c
 words, mean 138, 90th percentile 295, largest 16,176 words, and **91 clauses over 600 words**. The
 oversized-clause split in ADR-0004 is therefore mandatory, not optional.
 
-A re-measurement on 2026-11-12 with a slightly more permissive marker pattern gives 3,669 clauses and
-the same 16,176-word largest clause; the 91 oversized clauses sit in 31 of the 53 documents. See "The
-text to split is the JSON `context`" above, which also records that some documents have no line
-structure for the oversized split to use.
+A re-measurement on 2026-11-12 with a more permissive marker pattern gives 3,669 clauses, 65 clauses
+over 600 words across 31 documents, and the same 16,176-word largest clause. The counts are not
+interchangeable; see "Clause counts move with the marker pattern" above, which also records that some
+documents have no line structure for the oversized split to use.
 
 | Rule | Positive clauses | Base rate | Precision if 20% of clauses are escalated and 90% of positives caught |
 | --- | --- | --- | --- |
@@ -136,25 +136,20 @@ This is why ADR-0003 reports a separate false-alarm rate on certified-negative d
 Measured on 2026-11-12, while building the tracer bullet.
 
 The text every span offset is measured against is `paragraphs[0].context` in `CUAD_v1.json`. **Split
-that, not `full_contract_txt/`.** The two are not interchangeable: no file in `full_contract_txt/`
-is byte-identical to its JSON `context`, and the directory's filenames do not normalise onto the CSV
-`Filename` column the way the titles do, so joining to them is a second unsolved join. Splitting the
-`.txt` and grading against JSON offsets would shift every overlap silently.
+that.** `full_contract_txt/` is not an alternative, for a simpler reason than whitespace drift: it is
+**incomplete**. It ships 19 `.txt` files in `Part_I/`-style subdirectories, against 510 documents, and
+only 3 of the 53 License Agreement Set documents have one at all. Of those 3, all 3 are
+**byte-identical** to their JSON `context`, so there is no evidence the two sources disagree — there
+is simply not enough of one to use. Grade and split the same string.
 
-Splitting the JSON `context` at line-start item markers gives **3,669 clauses** over the 53
-documents, against the 3,244 measured earlier. The difference is the marker pattern, not the data:
-this count accepts a bare `(A)` and a trailing-dot `1.` that the earlier probe did not. Treat both as
-the same measurement to within the marker definition, which ticket 03 settles. The largest clause
-reproduces exactly, at **16,176 words**.
-
-**31 of the 53 documents** hold at least one clause over 600 words. That is consistent with the 91
-oversized clauses counted below, which are those 91 clauses spread across those 31 documents — the
-two figures count different things, clauses and documents.
+Corpus size reconciles with the figure above once Pacira is counted: the 53 contexts hold
+**2,990,822 characters**, and **2,845,654 excluding Pacira**, which is exactly the number recorded
+earlier. Pacira alone is 145,168 characters.
 
 **The line structure is a page artefact, and in some documents it is absent.** Newlines sit at page
-boundaries, not at item boundaries: 21,172 newlines across 2,990,822 characters, so a "line" is
-about one page. Most documents still carry their item markers at the start of a line, which is why
-the naive partition works at all. But some do not. In
+boundaries, not item boundaries: 21,172 newlines across 2,990,822 characters, so a "line" averages
+about a page. Most documents still carry their item markers at the start of a line, which is why the
+naive partition works at all. But some do not. In
 `HertzGroupRealtyTrustInc_..._Trademark License Agreement` an entire page is one line —
 `ARTICLE 1. BACKGROUND AND DEFINITIONS 1.1 Licensor has adopted ... 1.2 Licensee is ...` — and the
 whole 14,313-character contract yields **4 clauses**.
@@ -164,6 +159,28 @@ split at either**, so cutting oversized clauses at paragraph breaks cannot bring
 ceiling. Ticket 03 needs a fallback that does not depend on finding a newline. The ticket 01 tracer
 documents were therefore chosen from documents the line-start splitter does partition sensibly, so
 the tracer exercises the pipeline rather than this weak spot.
+
+### Clause counts move with the marker pattern, so quote the pattern
+
+The ticket 01 splitter cuts on `\d+(\.\d+)*\.?` or `\([A-Za-z]{1,4}\)` at a line start, followed by
+whitespace. Under it the 53 documents give **3,669 clauses**, against the 3,244 recorded earlier
+under a stricter pattern. The largest clause is identical at **16,176 words**, so the two agree on the
+shape of the problem and differ on where sub-items stop being cut.
+
+Of the cuts this pattern fires, 2,055 line starts are dotted or numbered, 996 are lettered, and
+**170 are a bare integer** with no dot — a page number, a year or a table quantity sitting at a line
+start. That is a measured contribution to the gap, not a complete account of it; the exact cause of
+the remaining difference was not chased, and ticket 03 settles the marker definition.
+
+Oversized clauses also move with the pattern, so the two counts are **not** interchangeable:
+
+| Marker pattern | Clauses | Clauses over 600 words |
+| --- | --- | --- |
+| Stricter, 2026-11-11 | 3,244 | 91 |
+| Ticket 01 splitter, 2026-11-12 | 3,669 | 65 |
+
+Under the ticket 01 splitter those 65 oversized clauses sit in **31 of the 53 documents**. Either way
+the oversized split stays mandatory.
 
 ## Spans sit inside one clause 97% of the time
 

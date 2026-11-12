@@ -45,6 +45,8 @@ them to split at. Splitting oversized clauses at paragraph breaks therefore cann
 documents under the ceiling. Measured detail is in `docs/cuad-ground-truth.md` under "The text to
 split is the JSON `context`".
 
-Also settled in ticket 01, so ticket 03 need not rediscover it: split the JSON `context`, never
-`full_contract_txt/`. No file there is byte-identical to its `context`, and its filenames do not
-normalise onto the CSV `Filename` column.
+Also settled in ticket 01, so ticket 03 need not rediscover it: split the JSON `context`, which is
+the string the span offsets are measured against. `full_contract_txt/` is not usable as a substitute
+because it is incomplete — 19 files for 510 documents, only 3 of our 53 — and its files sit in
+`Part_I/`-style subdirectories. Where a file does exist it is byte-identical to the `context`, so the
+two sources do not disagree; there is just not enough of one.

@@ -274,8 +274,11 @@ The 22,708 recorded earlier was 3,244 clauses times 7, so it moves with the part
 partition gives 3,246 times 7. Ticket 06 recomputed the cost: the earlier ~$0.20 predates the Parent
 Lines, and with them the whole run is about 6.4 million input tokens, ~$0.27. The token count is an
 estimate (characters over 4, since there is no tokenizer in the code), and the report prints it
-beside its sources, so read it as an order of magnitude. The price is from one unverified
-third-party blog and must be confirmed when the key arrives.
+beside its sources, so read it as an order of magnitude. Ticket 07 confirmed the price against the
+vendor's models page ($0.042 per million input tokens, output free). The 1,200 requests a minute
+limit is still third-party; the vendor says only that limits are per organization. Measured on the
+real client, a call takes about 0.4s, so the serial runner needs roughly 2.5 hours for the full run,
+not 20 minutes, unless it is made concurrent.
 
 ## Reproducing these numbers
 

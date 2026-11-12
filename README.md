@@ -31,6 +31,10 @@ uv run jev-cascade --rule R1 --cutoff 0.5 --out out
 uv run jev-cascade --out out --from-cache   # rebuild the report from the cache; never asks Jev
 ```
 
+The default is the signal-free stub. `--jev real` asks TypeSafe's Jev (pinned to `jev-1.14.0`) and
+reads the key from `JEV_API_KEY` in the environment, never from the repo. Load a git-ignored `.env`
+into the shell first: `set -a; . ./.env; set +a`. `--from-cache` needs no key.
+
 ## Where things are
 
 | Module | What it owns |
@@ -40,6 +44,7 @@ uv run jev-cascade --out out --from-cache   # rebuild the report from the cache;
 | `splitter.py` | Partitioning a document into Clauses |
 | `rulebook.py` | The seven Rules and their Detection Questions (ADR-0005) |
 | `jev.py` | The Jev client interface and the deterministic seeded stub |
+| `typesafe.py`, `clients.py` | The real Jev client (retries, rate spacing, pinned model) and the choice between it and the stub |
 | `runner.py` | Asking every Pair once, and the JSONL P(yes) cache |
 | `evaluator.py` | The pure metrics at one Cutoff, the Cutoff Curve and the free saving (ADR-0003) |
 | `cost.py` | What the expensive model would be asked and cost, Jev's cost and time, per 1,000 Clauses (pure; no model is called) |
@@ -49,7 +54,7 @@ uv run jev-cascade --out out --from-cache   # rebuild the report from the cache;
 
 ## Status
 
-Tickets 01 to 06 are built. The run scores one Rule (R1) on three documents with the stub client at
+Tickets 01 to 07 are built. The run scores one Rule (R1) on three documents with the stub client at
 one fixed Cutoff plus the whole Cutoff Curve, and **every figure it prints is stub-derived and
 carries no signal** (the cost section's full-run Jev estimate is the exception: it needs no P(yes)).
 The report's

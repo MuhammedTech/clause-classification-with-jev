@@ -49,7 +49,7 @@ class Sourced:
     `source` says plainly when a figure is an assumption or unverified, because the report prints it.
     """
 
-    value: float
+    value: float | str
     unit: str
     source: str
     as_of: str
@@ -91,11 +91,32 @@ BATCH_DISCOUNT = Sourced(
     _CLAUDE_LIST_PRICES_AS_OF,
 )
 
+#: The Jev model the real client asks, **pinned to a version, never `jev-latest`**. The runner reads
+#: the model version before the first call and puts it in every cache key, so it must be known
+#: without a network call, and an alias that moved would serve old answers under a new model.
+JEV_MODEL = Sourced(
+    "jev-1.14.0",
+    "model id sent in the request's `model` field",
+    "https://docs.typesafe.ai/models.md: `jev-latest` points to jev-1.14.0 (released 2026-10-14); "
+    "the page advises sending the version id, not the alias, when results must stay stable",
+    "2026-11-12",
+)
+
+#: The System One endpoint: POST, `Authorization: Bearer <key>`, JSON body `{model, state, questions}`.
+JEV_ENDPOINT = Sourced(
+    "https://api.typesafe.ai/v1/systemone",
+    "URL",
+    "https://docs.typesafe.ai/introduction/quickstart.md (official quick start)",
+    "2026-11-12",
+)
+
 #: What Jev charges, on input tokens only: its answer is one probability, so output is taken as free.
 JEV_INPUT_PRICE = Sourced(
     0.042,
     _USD_PER_MTOK,
-    "one unverified third-party blog; to be confirmed against the vendor when the key arrives",
+    "https://docs.typesafe.ai/models.md: $42 per billion tokens for Jev 1.14 and 1.13, input "
+    "tokens billed, output tokens free (vendor's official models page; no separate pricing page "
+    "exists in its docs index)",
     "2026-11-12",
 )
 
@@ -103,7 +124,27 @@ JEV_INPUT_PRICE = Sourced(
 JEV_RATE_LIMIT_PER_MINUTE = Sourced(
     1200,
     "requests per minute",
-    "the published rate limit recorded in docs/cuad-ground-truth.md (run size); not re-checked",
+    "unverified: several third-party blogs agree on 1,200 requests a minute and 250,000 input "
+    "tokens a second, but the vendor's models page says only that limits are set per organization, "
+    "in tokens and requests per second, and shown in the developer console. Check the console",
+    "2026-11-12",
+)
+
+#: How much text one Jev call can take. A Clause plus its Parent Line must fit under both.
+JEV_CONTEXT_PER_REQUEST_TOKENS = Sourced(
+    64_000,
+    "tokens per request: the state plus all questions",
+    "https://docs.typesafe.ai/models.md (default context window); 262,000 with the "
+    "`TypeSafe-Danger-Zone-Long-Context: true` header, which this client does not send",
+    "2026-11-12",
+)
+
+JEV_CONTEXT_PER_QUESTION_TOKENS = Sourced(
+    32_000,
+    "tokens per question: the state plus that one question",
+    "https://docs.typesafe.ai/models.md (default context window). One question per call, so this "
+    "is the binding limit. Over it the API answers HTTP 400 `max_tokens_exceeded` "
+    "(https://docs.typesafe.ai/api/errors.md)",
     "2026-11-12",
 )
 

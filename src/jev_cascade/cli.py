@@ -6,7 +6,9 @@ import argparse
 from pathlib import Path
 
 from . import config
-from .jev import CacheOnlyJevClient, JevCallRefused, StubJevClient
+from .clients import KINDS, build_client
+from .jev import JevCallRefused
+from .typesafe import JevError
 from .pipeline import DEFAULT_CUTOFF, DEFAULT_RULE_IDS, TRACER_DOC_IDS, run
 
 
@@ -45,10 +47,19 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Where the cache and report go. Default {config.DEFAULT_OUT_DIR}/.",
     )
     parser.add_argument(
+        "--jev",
+        choices=KINDS,
+        default="stub",
+        help=(
+            "Which Jev to ask: the signal-free stub (default) or the real TypeSafe client, which "
+            "reads its key from JEV_API_KEY in the environment."
+        ),
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=0,
-        help="Seed for the stub Jev client. Default 0.",
+        help="Seed for the stub Jev client (ignored by --jev real). Default 0.",
     )
     parser.add_argument(
         "--from-cache",
@@ -71,9 +82,10 @@ def main(argv: list[str] | None = None) -> int:
             "CUAD_DIR to where CUAD_v1.json and master_clauses.csv live."
         )
 
-    client = StubJevClient(seed=args.seed)
-    if args.from_cache:
-        client = CacheOnlyJevClient(client)
+    try:
+        client = build_client(args.jev, seed=args.seed, from_cache=args.from_cache)
+    except JevError as error:
+        parser.error(str(error))
 
     try:
         result = run(
@@ -88,6 +100,8 @@ def main(argv: list[str] | None = None) -> int:
             f"--from-cache: the cache in {args.out} does not hold every Pair this run needs. "
             "Run once without --from-cache to fill it."
         )
+    except JevError as error:
+        parser.error(f"Jev failed: {error}. Answers already received are in the cache, so the same command resumes.")
 
     print(f"Wrote {result.report_path}")
     print(

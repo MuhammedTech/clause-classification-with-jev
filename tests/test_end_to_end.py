@@ -214,8 +214,9 @@ def test_the_command_runs_and_reports_where_it_wrote(tmp_path, capsys):
 def test_running_the_command_twice_reports_zero_jev_calls(tmp_path, capsys):
     # The ticket's "a second run makes zero client calls", asked of the command itself rather
     # than of run().
+    # Anchored on "Pairs: ", because a bare "0 Jev calls" also matches inside "150 Jev calls".
     assert main(["--out", str(tmp_path)]) == 0
-    assert "0 Jev calls" not in capsys.readouterr().out
+    assert "Pairs: 0 Jev calls" not in capsys.readouterr().out
 
     assert main(["--out", str(tmp_path)]) == 0
-    assert "0 Jev calls" in capsys.readouterr().out
+    assert "Pairs: 0 Jev calls" in capsys.readouterr().out

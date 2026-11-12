@@ -166,9 +166,11 @@ Corpus size reconciles with the figure above once Pacira is counted: the 53 cont
 earlier. Pacira alone is 145,168 characters.
 
 **The line structure is a page artefact, and in some documents it is absent.** Newlines sit at page
-boundaries, not item boundaries: 21,172 newlines across 2,990,822 characters, so a "line" averages
-about a page. Most documents still carry their item markers at the start of a line, which is why the
-naive partition works at all. But some do not. In
+boundaries, not item boundaries. Corrected on 2026-11-12 during ticket 03: an earlier version of this
+file said a "line" averages about a page, which is wrong. Measured, 21,225 lines over 2,990,822
+characters is a **mean of 141 characters**, so a line is a sentence or two for most of the corpus and
+the page-long lines are confined to a few documents. Most documents carry their item markers at the
+start of a line, which is why the naive partition works at all. But some do not. In
 `HertzGroupRealtyTrustInc_..._Trademark License Agreement` an entire page is one line —
 `ARTICLE 1. BACKGROUND AND DEFINITIONS 1.1 Licensor has adopted ... 1.2 Licensee is ...` — and the
 whole 14,313-character contract yields **4 clauses**.
@@ -178,6 +180,13 @@ split at either**, so cutting oversized clauses at paragraph breaks cannot bring
 ceiling. Ticket 03 needs a fallback that does not depend on finding a newline. The ticket 01 tracer
 documents were therefore chosen from documents the line-start splitter does partition sensibly, so
 the tracer exercises the pipeline rather than this weak spot.
+
+**Measured when ticket 03 built that fallback** (2026-11-12): of the 92 Clauses over 600 words after
+the marker cut and heading merge, **88 contain a newline and 4 do not**, so the fallback is needed for
+4, not for every page-line document. All 4 are in one document, Ehave (`EX-4.44 ... Reseller
+Agreement`). Hertz itself no longer produces an oversized Clause once the marker is settled. The
+splitter's cut levels are paragraph break, line break, sentence end and word break, in that order, so
+the ceiling is always reached.
 
 ### Clause counts move with the marker pattern, so quote the pattern
 
@@ -201,23 +210,62 @@ Oversized clauses also move with the pattern, so the two counts are **not** inte
 Under the ticket 01 splitter those 65 oversized clauses sit in **31 of the 53 documents**. Either way
 the oversized split stays mandatory.
 
-## Spans sit inside one clause 97% of the time
+### The final partition (ticket 03, 2026-11-12)
 
-Of the 429 spans, 418 contain no item marker, 5 contain one, 1 contains two, and 5 contain four or
-more. So provisions spanning several clauses affect about 3% of cases. The old spec's "97% of
-highlights inside exactly one clause" target was not arbitrary; it is what the data gives.
+With the marker settled (a plain integer needs its dot), headings merged forward, Parent Lines from
+the marker nesting and the oversized split at **600 words**, all 53 documents give:
+
+| | Before the oversized split | After it |
+| --- | --- | --- |
+| Clauses | 3,004 | **3,257** |
+| Median words | 66 | 72 |
+| Mean words | 149.0 | 137.4 |
+| 90th percentile words | 315 | 429 |
+| Largest, in words | 16,176 | **600** |
+| Clauses over 600 words | 92 | **0** |
+
+The three marker-pattern counts above (3,244, 3,669, 3,130 regions) all precede the heading merge,
+which is why 3,004 is lower than any of them. The oversized split adds 253 Clauses and moves the
+median and the 90th percentile up; the splitter packs greedily up to the ceiling, so many of the
+new pieces sit close to it (the per-document table shows documents whose largest Clause is 598 or
+600 words). The cause of the median's rise was not isolated. `tests/test_partition.py` asserts the
+partition, the ceiling and that no Highlight is held by zero Clauses, over all 53 documents.
+
+**Parent Lines add 9.6% more words** for Jev to read per Rule: 985 of the 3,257 Clauses carry one,
+42,794 words over 447,653 words of Clause text. Their distribution is lopsided: the 99th percentile
+is 378 words and the largest is **801**, because where a page is one line the first line of an item
+is that page. Ticket 06 turns this into tokens; there is no tokenizer in the code.
+
+**The depth rule alone gives wrong Parent Lines.** For 301 of 666 numbered items beneath a numbered
+ancestor, the nearest shallower item has a different leading number (`7.2` with no `7.` above it
+lands under `6. Term and Termination.`). The splitter requires the numbering to agree for a numbered
+item and gives it no Parent Line otherwise, on the ground that a wrong section label is worse than an
+empty one. Lettered items use the depth rule alone, which cannot be checked this way.
+
+## Highlights sit inside one clause 98.8% of the time
+
+Measured on the final partition: **424 of 429 Highlights** overlap exactly one Clause. The other 5 are
+held by several. By raw marker count the figure was lower: of the 429 spans, 418 contain no item
+marker, 5 contain one, 1 contains two, and 5 contain four or more. The earlier "97%" came from that
+count, and the spec's "about 97%" expectation is that raw figure rounded. The measured share on the
+real partition is 98.8%, so the expectation was slightly pessimistic. Neither is a build gate
+(ADR-0004), and the report prints the share per document so a bad split shows. The gap between the
+two was not chased.
 
 ## Run size
 
 | | |
 | --- | --- |
-| Clauses (naive partition) | 3,244 |
+| Clauses (final partition) | 3,257 |
 | Rules | 7 |
-| Jev calls | 22,708 |
+| Jev calls | 22,799 |
 | Wall clock at ~1,200 req/min | ~20 minutes |
-| Jev cost at $0.042 per million input tokens | ~$0.20 |
+| Jev cost at $0.042 per million input tokens | ~$0.20 (not recomputed) |
 
-The price is from one unverified third-party blog and must be confirmed when the key arrives.
+The 22,708 recorded earlier was 3,244 clauses times 7, so it moves with the partition: the final
+partition gives 3,257 times 7. The cost figure was not re-derived, and the 9.6% extra words from
+Parent Lines are not in it; ticket 06 counts tokens properly. The price is from one unverified
+third-party blog and must be confirmed when the key arrives.
 
 ## Reproducing these numbers
 

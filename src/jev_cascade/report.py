@@ -14,6 +14,7 @@ from typing import Sequence
 
 from .corpus import GATE_MIN_DOCUMENTS, GATE_MIN_HIGHLIGHTS, CorpusFacts, RuleCounts
 from .evaluator import RuleMetrics
+from .partition import PartitionFacts
 from .rulebook import (
     DROPPED_REASONS,
     QUESTION_TYPE,
@@ -47,6 +48,7 @@ class ReportInputs:
     documents: Sequence[DocumentSummary]
     is_stub: bool
     corpus: CorpusFacts
+    partition: PartitionFacts
 
 
 def _format_share(value: float | None) -> str:
@@ -189,6 +191,59 @@ def _rulebook_section(corpus: CorpusFacts) -> list[str]:
     return lines
 
 
+def _partition_section(partition: PartitionFacts) -> list[str]:
+    """How the Splitter cut the whole corpus, with the per-document share so a bad split shows.
+
+    Corpus-wide on purpose: the documents a run scores may be the ones that split cleanly.
+    """
+    ceiling = partition.word_ceiling
+    lines = [
+        "## Partition",
+        "",
+        f"The Splitter cut **all {len(partition.documents)} documents**, whichever of them this run "
+        "scored, so the documents it handles badly are visible here (ADR-0004). Every character of "
+        "each document lands in exactly one Clause, and a Clause over the word ceiling is split "
+        f"again at paragraph breaks, then line breaks, sentence ends and word breaks, until none is "
+        f"over **{ceiling} words**.",
+        "",
+        "| | |",
+        "| --- | --- |",
+        f"| Clauses | {partition.clauses} |",
+        f"| Words in Clauses | {partition.words} |",
+        f"| Median Clause | {partition.median_clause_words:g} words |",
+        f"| Mean Clause | {partition.mean_clause_words:.1f} words |",
+        f"| 90th percentile Clause | {partition.p90_clause_words} words |",
+        f"| Largest Clause | {partition.largest_clause_words} words |",
+        f"| Clauses over the word ceiling | {partition.over_ceiling} |",
+        "",
+        f"**Highlights inside exactly one Clause:** {partition.single_clause_highlights} of "
+        f"{partition.highlights} ({_format_share(partition.single_clause_share)}). This is a "
+        "reported number and not a build gate: it is what the data gives, and gating on it would "
+        "pressure the Splitter to stop separating sub-items (ADR-0004). The rest are held by "
+        "several Clauses, which is why Provision Recall can exceed Clause Recall.",
+        "",
+        f"**Parent Line context.** {partition.clauses_with_parent_line} of {partition.clauses} "
+        f"Clauses carry a Parent Line, adding {partition.parent_line_words} words to the "
+        f"{partition.words} words of Clause text: **{_format_share(partition.parent_line_growth)} "
+        f"more words** for Jev to read per Rule. The largest Parent Line is "
+        f"{partition.largest_parent_line_words} words, because in documents where a whole page is "
+        "one line the first line of an item can be that long. Growth is counted in words: there is "
+        "no tokenizer here, and token counts belong to the cost estimate (ticket 06).",
+        "",
+        "| Document | Clauses | Words | Largest Clause | Highlights | Inside one Clause | Share |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for document in partition.documents:
+        lines.append(
+            f"| {document.doc_id} | {document.clauses} | {document.words} | "
+            f"{document.largest_clause_words} | {document.highlights} | "
+            f"{document.single_clause_highlights} | "
+            f"{_format_share(document.single_clause_share)} |"
+        )
+    lines.append("")
+    return lines
+
+
 def render(inputs: ReportInputs) -> str:
     """Render the tracer-bullet report."""
     label = "stub" if inputs.is_stub else inputs.model_version
@@ -236,6 +291,7 @@ def render(inputs: ReportInputs) -> str:
 
     lines.extend(_corpus_section(inputs.corpus))
     lines.extend(_rulebook_section(inputs.corpus))
+    lines.extend(_partition_section(inputs.partition))
 
     lines.append("## Documents scored in this run")
     lines.append("")

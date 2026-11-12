@@ -24,6 +24,12 @@ A numbered or lettered item of a contract (`1.`, `1.1`, `(a)`), the unit every j
 Clauses **partition** the document: every character belongs to exactly one.
 _Avoid_: chunk, window, segment, passage
 
+**Word Ceiling**:
+The most words a Clause may hold: **600**, so a Clause of exactly 600 stands and one of 601 is split.
+A Clause over it is split again at paragraph breaks, then line breaks, sentence ends and word breaks,
+until none exceeds it. Words are counted by whitespace, the same count the Binned Share uses.
+_Avoid_: max chunk size, token limit, length cap
+
 **Highlight**:
 A span of contract text a CUAD lawyer marked as an instance of a CUAD category. The only ground truth
 there is.
@@ -31,7 +37,10 @@ _Avoid_: annotation, answer, span
 
 **Parent Line**:
 The introductory line a Clause sits under ("Licensee commits to:"), or its section heading. Shown to
-Jev as context, never used in grading. One level only.
+Jev as context, never used in grading. One level only. It is the item one level up, never a sibling,
+and it is empty when the numbering gives no parent: a numbered item after a gap (`7.2` with no `7.`
+above it) takes none rather than naming the wrong section. The pieces of a split Clause keep the whole
+Clause's Parent Line.
 _Avoid_: lead-in, header, intro, stem
 
 ### Rules and labels

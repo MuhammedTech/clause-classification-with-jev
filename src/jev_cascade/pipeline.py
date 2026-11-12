@@ -18,6 +18,7 @@ from .corpus import corpus_facts, load_corpus
 from .domain import Clause, Highlight
 from .evaluator import RuleMetrics, evaluate_rule
 from .jev import JevClient, StubJevClient
+from .partition import partition_facts
 from .report import DocumentSummary, ReportInputs, render
 from .rulebook import Rule, rule
 from .runner import RunStats, run_pairs
@@ -111,6 +112,9 @@ def run(
             # Corpus-wide and counted from CUAD, so it does not depend on which documents or
             # Rules this run scored: the gate is a statement about the available ground truth.
             corpus=corpus_facts(directory=cuad_directory),
+            # Also corpus-wide: every document is split, with all seven Rules' Highlights, so a
+            # document this run did not score still shows how well it partitions. No Jev calls.
+            partition=partition_facts(load_corpus(directory=cuad_directory)),
         )
     )
 

@@ -6,7 +6,7 @@ a span and at least 25 spans, and it is not independent of R1.
 
 R5 and R8 changed meaning from the original notes — Exclusivity replaced Non-Compete and
 Anti-Assignment replaced Volume Restriction — so their results must not be compared to the old
-rules. The report says so.
+rules. Ticket 05 puts that statement in the report; ticket 01's report covers one Rule only.
 
 The wording below is drafted and awaits the user's review in ticket 08.
 """
@@ -59,12 +59,6 @@ RULEBOOK: tuple[Rule, ...] = (
     ),
 )
 
-#: Dropped in ADR-0005: the only Rule failing the gate, at 16 documents and 23 spans.
-DROPPED_RULE = Rule("R4", "Uncapped Liability", "")
-
-#: Rules whose CUAD category replaced a different one in the original notes.
-REPLACED_RULES = {"R5": "Non-Compete", "R8": "Volume Restriction"}
-
 _BY_ID = {rule.id: rule for rule in RULEBOOK}
 
 
@@ -73,9 +67,9 @@ def rule(rule_id: str) -> Rule:
     try:
         return _BY_ID[rule_id]
     except KeyError:
-        if rule_id == DROPPED_RULE.id:
+        if rule_id == "R4":
             raise KeyError(
-                f"{rule_id} ({DROPPED_RULE.cuad_category}) was dropped in ADR-0005: it is the "
-                "only Rule failing the gate, and it is not independent of R1"
+                "R4 was dropped in ADR-0005: it is the only Rule failing the gate, at 16 "
+                "documents and 23 spans, and it is not independent of R1"
             ) from None
         raise KeyError(f"Unknown rule {rule_id}; the Rulebook holds {sorted(_BY_ID)}") from None

@@ -24,6 +24,11 @@ class JevClient(Protocol):
         """Identifies the answering model. Part of the P(yes) cache key."""
         ...
 
+    @property
+    def is_stub(self) -> bool:
+        """Whether the answers carry no signal, so the report can label every figure."""
+        ...
+
     def p_yes(
         self,
         clause_text: str,
@@ -46,9 +51,22 @@ class StubJevClient:
     """
 
     seed: int = 0
-    model_version: str = "stub-v1"
+    name: str = "stub-v1"
     #: P(yes) is rounded to this many decimals, as a real client's output would be.
     decimals: int = 4
+
+    @property
+    def model_version(self) -> str:
+        """The seed is part of this, and so of the cache key.
+
+        Two seeds give different answers, so a cache written under one must not be served to the
+        other.
+        """
+        return f"{self.name}+seed{self.seed}"
+
+    @property
+    def is_stub(self) -> bool:
+        return True
 
     def p_yes(
         self,
@@ -86,6 +104,10 @@ class CountingJevClient:
     def model_version(self) -> str:
         return self.inner.model_version
 
+    @property
+    def is_stub(self) -> bool:
+        return self.inner.is_stub
+
     def p_yes(
         self,
         clause_text: str,
@@ -112,6 +134,10 @@ class FailingJevClient:
     @property
     def model_version(self) -> str:
         return self.inner.model_version
+
+    @property
+    def is_stub(self) -> bool:
+        return self.inner.is_stub
 
     def p_yes(
         self,

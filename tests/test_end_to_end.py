@@ -75,6 +75,43 @@ def test_no_highlight_in_the_tracer_documents_is_held_by_zero_clauses():
             assert any(holds(c, highlight) for c in clauses)
 
 
+def test_no_clause_holds_a_highlight_from_another_document(tmp_path):
+    # Offsets are per document. Pooling the tracer documents into one evaluation invented six
+    # holding relations against four real ones, two of them inside the Certified Negative
+    # document, and inflated the base rate from 1.2% to 3.5%.
+    result = run(client=StubJevClient(), out_dir=tmp_path)
+
+    for clause in result.clauses:
+        for highlight in result.highlights:
+            if holds(clause, highlight):
+                assert clause.doc_id == highlight.doc_id
+
+
+def test_the_certified_negative_document_holds_nothing(tmp_path):
+    # CUAD flags this document as having no Cap On Liability clause anywhere, so no Clause of it
+    # may hold an R1 Highlight. This is the spec's bulletproof negative.
+    result = run(client=StubJevClient(), out_dir=tmp_path)
+    certified = [
+        d for d in load_corpus(rules=[rule("R1")], doc_ids=TRACER_DOC_IDS)
+        if d.is_certified_negative("R1")
+    ]
+    assert len(certified) == 1
+    certified_id = certified[0].doc_id
+
+    for clause in (c for c in result.clauses if c.doc_id == certified_id):
+        assert not any(holds(clause, h) for h in result.highlights)
+
+
+def test_the_reported_base_rate_matches_the_measured_corpus_order(tmp_path):
+    # docs/cuad-ground-truth.md measures a 1.57% base rate for Cap On Liability corpus-wide. A
+    # tracer base rate several times that means Clauses are being credited with Highlights they
+    # do not hold.
+    result = run(client=StubJevClient(), out_dir=tmp_path)
+    (r1,) = result.metrics
+    assert r1.base_rate is not None
+    assert r1.base_rate < 0.03
+
+
 def test_the_command_runs_and_reports_where_it_wrote(tmp_path, capsys):
     exit_code = main(["--out", str(tmp_path), "--cutoff", "0.5"])
     captured = capsys.readouterr().out

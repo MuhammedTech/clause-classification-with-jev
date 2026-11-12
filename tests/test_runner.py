@@ -29,7 +29,7 @@ def test_every_pair_is_asked_once_on_a_cold_cache(tmp_path):
     cache = tmp_path / "pyes.jsonl"
     client = CountingJevClient(StubJevClient())
 
-    table = run_pairs(clauses(), [R1], client, cache)
+    table, _ = run_pairs(clauses(), [R1], client, cache)
 
     assert client.calls == 3
     # The table is keyed by Rule id, then by (document, Clause span).
@@ -41,10 +41,10 @@ def test_every_pair_is_asked_once_on_a_cold_cache(tmp_path):
 
 def test_a_second_run_makes_zero_client_calls(tmp_path):
     cache = tmp_path / "pyes.jsonl"
-    first = run_pairs(clauses(), [R1], CountingJevClient(StubJevClient()), cache)
+    first, _ = run_pairs(clauses(), [R1], CountingJevClient(StubJevClient()), cache)
 
     second_client = CountingJevClient(StubJevClient())
-    second = run_pairs(clauses(), [R1], second_client, cache)
+    second, _ = run_pairs(clauses(), [R1], second_client, cache)
 
     assert second_client.calls == 0
     assert second == first
@@ -60,7 +60,7 @@ def test_a_run_interrupted_midway_resumes_from_the_cache(tmp_path):
     assert len(read_cache(cache)) == 2
 
     resumed = CountingJevClient(StubJevClient())
-    table = run_pairs(clauses(), [R1], resumed, cache)
+    table, _ = run_pairs(clauses(), [R1], resumed, cache)
 
     # Exactly the unanswered Pair is asked again.
     assert resumed.calls == 1
@@ -91,7 +91,7 @@ def test_a_cache_row_records_the_key_and_the_question_asked(tmp_path):
     assert row["clause_end"] == 10
     assert row["rule_id"] == "R1"
     assert row["question_type"] == QUESTION_TYPE
-    assert row["model_version"] == "stub-v1"
+    assert row["model_version"] == "stub-v1+seed0"
     # The question wording is not part of the key, so storing it is what makes a cache written
     # under different wording (ticket 08) detectable.
     assert row["question"] == R1.detection_question
@@ -100,12 +100,43 @@ def test_a_cache_row_records_the_key_and_the_question_asked(tmp_path):
 
 def test_a_cache_written_by_another_model_version_is_not_reused(tmp_path):
     cache = tmp_path / "pyes.jsonl"
-    run_pairs(clauses(), [R1], StubJevClient(model_version="stub-v1"), cache)
+    run_pairs(clauses(), [R1], StubJevClient(name="stub-v1"), cache)
 
-    newer = CountingJevClient(StubJevClient(model_version="stub-v2"))
+    newer = CountingJevClient(StubJevClient(name="stub-v2"))
     run_pairs(clauses(), [R1], newer, cache)
 
     assert newer.calls == 3
+
+
+def test_a_cache_written_under_another_seed_is_not_reused(tmp_path):
+    # Two seeds give different answers, so the seed belongs in the cache key by way of the model
+    # version. Otherwise --seed 1 would be served seed 0's answers and report zero calls.
+    cache = tmp_path / "pyes.jsonl"
+    run_pairs(clauses(), [R1], StubJevClient(seed=0), cache)
+
+    other_seed = CountingJevClient(StubJevClient(seed=1))
+    run_pairs(clauses(), [R1], other_seed, cache)
+
+    assert other_seed.calls == 3
+
+
+def test_a_kill_mid_write_does_not_cost_an_answer(tmp_path):
+    # A run killed mid-write leaves a line with no newline. The next run must terminate it before
+    # appending, or its first answer is glued onto the fragment and lost too.
+    cache = tmp_path / "pyes.jsonl"
+    partial = FailingJevClient(StubJevClient(), limit=1)
+    with pytest.raises(JevCallLimitReached):
+        run_pairs(clauses(), [R1], partial, cache)
+    with cache.open("a", encoding="utf-8") as handle:
+        handle.write('{"doc_id": "D", "clause_start": 10, "clause_en')
+
+    resumed = CountingJevClient(StubJevClient())
+    run_pairs(clauses(), [R1], resumed, cache)
+    assert resumed.calls == 2
+
+    settled = CountingJevClient(StubJevClient())
+    run_pairs(clauses(), [R1], settled, cache)
+    assert settled.calls == 0
 
 
 def test_the_stub_is_deterministic_across_clients():
@@ -114,17 +145,18 @@ def test_the_stub_is_deterministic_across_clients():
     args = ("liability is capped", "1. Liability", R1.detection_question, QUESTION_TYPE)
     assert one.p_yes(*args) == two.p_yes(*args)
     assert StubJevClient(seed=8).p_yes(*args) != one.p_yes(*args)
+    assert one.is_stub is True
 
 
 def test_the_runner_reports_the_calls_it_made_and_the_time_it_took(tmp_path):
     cache = tmp_path / "pyes.jsonl"
-    table, stats = run_pairs(clauses(), [R1], StubJevClient(), cache, with_stats=True)
+    table, stats = run_pairs(clauses(), [R1], StubJevClient(), cache)
 
     assert stats.pairs == 3
     assert stats.calls_made == 3
     assert stats.cache_hits == 0
     assert stats.seconds >= 0.0
 
-    _, again = run_pairs(clauses(), [R1], StubJevClient(), cache, with_stats=True)
+    _, again = run_pairs(clauses(), [R1], StubJevClient(), cache)
     assert again.calls_made == 0
     assert again.cache_hits == 3

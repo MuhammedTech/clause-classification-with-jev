@@ -7,7 +7,7 @@ recompute what the implementation does.
 import pytest
 
 from jev_cascade.domain import Clause, Highlight
-from jev_cascade.evaluator import clause_key, evaluate_rule
+from jev_cascade.evaluator import evaluate_rule
 
 
 def make_clause(index: int, start: int, end: int, text: str) -> Clause:
@@ -33,7 +33,7 @@ FOUR_CLAUSES = [
     make_clause(3, 60, 80, "ten"),
 ]
 TWO_HIGHLIGHTS = [make_highlight(25, 30), make_highlight(45, 50)]
-FOUR_SCORES = {
+FOUR_PYES = {
     ("D", "0-20"): 0.10,
     ("D", "20-40"): 0.50,
     ("D", "40-60"): 0.90,
@@ -42,7 +42,7 @@ FOUR_SCORES = {
 
 
 def evaluate_four(cutoff: float):
-    return evaluate_rule("R1", FOUR_CLAUSES, TWO_HIGHLIGHTS, FOUR_SCORES, cutoff)
+    return evaluate_rule("R1", FOUR_CLAUSES, TWO_HIGHLIGHTS, FOUR_PYES, cutoff)
 
 
 def test_a_pair_at_the_cutoff_is_binned_not_escalated():
@@ -66,7 +66,7 @@ def test_precision_counts_escalated_clauses_not_highlights():
     # though only one of the two Highlights survived.
     m = evaluate_four(0.50)
     assert m.escalated_clauses == 1
-    assert m.escalated_holding == 1
+    assert m.holding_escalated == 1
     assert m.precision == pytest.approx(1.0)
 
 
@@ -119,11 +119,11 @@ THREE_CLAUSES = [
     make_clause(2, 20, 30, "c"),
 ]
 SPANNING_HIGHLIGHT = [make_highlight(5, 25)]
-THREE_SCORES = {("D", "0-10"): 0.10, ("D", "10-20"): 0.10, ("D", "20-30"): 0.90}
+THREE_PYES = {("D", "0-10"): 0.10, ("D", "10-20"): 0.10, ("D", "20-30"): 0.90}
 
 
 def test_a_highlight_across_three_clauses_is_not_lost_when_one_is_escalated():
-    m = evaluate_rule("R1", THREE_CLAUSES, SPANNING_HIGHLIGHT, THREE_SCORES, 0.50)
+    m = evaluate_rule("R1", THREE_CLAUSES, SPANNING_HIGHLIGHT, THREE_PYES, 0.50)
     assert m.holding_clauses == 3
     assert m.holding_escalated == 1
     assert m.lost_provisions == 0
@@ -131,7 +131,7 @@ def test_a_highlight_across_three_clauses_is_not_lost_when_one_is_escalated():
 
 def test_provision_recall_exceeds_clause_recall_on_a_spanning_highlight():
     # Clause Recall is 1 of 3 holding Clauses; Provision Recall is the whole Highlight, 1 of 1.
-    m = evaluate_rule("R1", THREE_CLAUSES, SPANNING_HIGHLIGHT, THREE_SCORES, 0.50)
+    m = evaluate_rule("R1", THREE_CLAUSES, SPANNING_HIGHLIGHT, THREE_PYES, 0.50)
     assert m.clause_recall == pytest.approx(1 / 3)
     assert m.provision_recall == pytest.approx(1.0)
     assert m.provision_recall > m.clause_recall
@@ -140,14 +140,14 @@ def test_provision_recall_exceeds_clause_recall_on_a_spanning_highlight():
 def test_a_spanning_highlight_binned_everywhere_is_lost_once():
     # A Cutoff of 0.95 Bins all three holding Clauses. The Highlight is one Lost Provision, not
     # three.
-    m = evaluate_rule("R1", THREE_CLAUSES, SPANNING_HIGHLIGHT, THREE_SCORES, 0.95)
+    m = evaluate_rule("R1", THREE_CLAUSES, SPANNING_HIGHLIGHT, THREE_PYES, 0.95)
     assert m.holding_escalated == 0
     assert m.lost_provisions == 1
     assert m.provision_recall == pytest.approx(0.0)
 
 
 def test_a_rule_with_no_highlights_reports_recall_as_undefined():
-    m = evaluate_rule("R1", THREE_CLAUSES, [], THREE_SCORES, 0.50)
+    m = evaluate_rule("R1", THREE_CLAUSES, [], THREE_PYES, 0.50)
     assert m.highlights == 0
     assert m.clause_recall is None
     assert m.provision_recall is None
@@ -162,13 +162,32 @@ def test_a_highlight_held_by_no_clause_is_refused():
     # loss.
     orphan = [make_highlight(100, 200)]
     with pytest.raises(ValueError, match="held by no Clause"):
-        evaluate_rule("R1", THREE_CLAUSES, orphan, THREE_SCORES, 0.50)
+        evaluate_rule("R1", THREE_CLAUSES, orphan, THREE_PYES, 0.50)
 
 
-def test_a_clause_with_no_score_is_refused():
+def test_a_clause_with_no_p_yes_is_refused():
     with pytest.raises(KeyError, match="no P\\(yes\\)"):
         evaluate_rule("R1", THREE_CLAUSES, SPANNING_HIGHLIGHT, {("D", "0-10"): 0.1}, 0.50)
 
 
-def test_clause_key_identifies_a_clause_by_document_and_span():
-    assert clause_key(make_clause(0, 5, 9, "x")) == ("D", "5-9")
+def test_precision_and_clause_recall_share_their_numerator():
+    # An Escalated Clause that holds a Highlight and a holding Clause that is Escalated are the
+    # same set, so one count serves both figures.
+    m = evaluate_four(0.50)
+    assert m.holding_escalated == 1
+    assert m.precision == pytest.approx(m.holding_escalated / m.escalated_clauses)
+
+
+def test_clauses_and_highlights_are_not_pooled_across_documents():
+    # Two documents whose offsets overlap: each Highlight is held only inside its own document.
+    # Pooling them invented six holding relations against four real ones on the tracer run.
+    a = Clause(doc_id="A", index=0, start=0, end=100, text="one two three")
+    b = Clause(doc_id="B", index=0, start=0, end=100, text="four five six")
+    only_in_a = [Highlight(doc_id="A", rule_id="R1", start=10, end=20)]
+    pyes = {("A", "0-100"): 0.9, ("B", "0-100"): 0.9}
+
+    m = evaluate_rule("R1", [a, b], only_in_a, pyes, 0.5)
+
+    assert m.clauses == 2
+    assert m.holding_clauses == 1
+    assert m.precision == pytest.approx(0.5)

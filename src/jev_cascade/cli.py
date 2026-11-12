@@ -7,7 +7,7 @@ from pathlib import Path
 
 from . import config
 from .jev import StubJevClient
-from .pipeline import DEFAULT_CUTOFF, TRACER_DOC_IDS, run
+from .pipeline import DEFAULT_CUTOFF, DEFAULT_RULE_IDS, TRACER_DOC_IDS, run
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -23,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         dest="rule_ids",
         metavar="R1",
-        help="Rule to ask. Repeatable. Defaults to R1.",
+        help="Rule to ask. Repeatable. Defaults to {}.".format(", ".join(DEFAULT_RULE_IDS)),
     )
     parser.add_argument(
         "--doc",
@@ -54,10 +54,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     if not config.cuad_is_available():
-        parser = build_parser()
         parser.error(
             f"CUAD v1 not found at {config.cuad_dir()}. The dataset is not in this repo; set "
             "CUAD_DIR to where CUAD_v1.json and master_clauses.csv live."
@@ -66,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
     result = run(
         client=StubJevClient(seed=args.seed),
         doc_ids=tuple(args.doc_ids) if args.doc_ids else TRACER_DOC_IDS,
-        rule_ids=tuple(args.rule_ids) if args.rule_ids else ("R1",),
+        rule_ids=tuple(args.rule_ids) if args.rule_ids else DEFAULT_RULE_IDS,
         cutoff=args.cutoff,
         out_dir=args.out,
     )

@@ -4,6 +4,8 @@ Ticket 01 only needs line-start markers. The word ceiling and the heading rules 
 so the cases here are the partition guarantee and the marker basics.
 """
 
+import pytest
+
 from jev_cascade.splitter import ITEM_MARKER, split_document
 
 OPENING_AND_ITEMS = """SOFTWARE LICENCE AGREEMENT
@@ -63,7 +65,21 @@ def test_a_lettered_list_takes_the_line_above_as_its_parent_line():
     lettered = [c for c in clauses if c.text.lstrip().startswith(("(a)", "(b)"))]
     assert len(lettered) == 2
     assert lettered[0].parent_line == "2. Licensee commits to:"
-    assert lettered[1].parent_line == "(a) pay the fees."
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Ticket 03 owns marker nesting. The interim rule takes the last non-empty line above, "
+        "which for (b) is its sibling (a). A Parent Line is the line a Clause sits under, one "
+        "level only (GLOSSARY, ADR-0004), so a sibling is never one."
+    ),
+    strict=True,
+)
+def test_a_sibling_item_is_not_a_parent_line():
+    text = "2. Licensee commits to:\n(a) pay the fees.\n(b) report quarterly.\n"
+    clauses = split_document("D", text)
+    second = [c for c in clauses if c.text.lstrip().startswith("(b)")][0]
+    assert second.parent_line == "2. Licensee commits to:"
 
 
 def test_dotted_subsection_numbering_is_a_marker():

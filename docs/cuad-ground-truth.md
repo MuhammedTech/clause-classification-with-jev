@@ -94,6 +94,11 @@ From a naive partition of the 53 documents at line-start item markers: **3,244 c
 words, mean 138, 90th percentile 295, largest 16,176 words, and **91 clauses over 600 words**. The
 oversized-clause split in ADR-0004 is therefore mandatory, not optional.
 
+A re-measurement on 2026-11-12 with a slightly more permissive marker pattern gives 3,669 clauses and
+the same 16,176-word largest clause; the 91 oversized clauses sit in 31 of the 53 documents. See "The
+text to split is the JSON `context`" above, which also records that some documents have no line
+structure for the oversized split to use.
+
 | Rule | Positive clauses | Base rate | Precision if 20% of clauses are escalated and 90% of positives caught |
 | --- | --- | --- | --- |
 | Minimum Commitment | 59 | 1.82% | ~8% |
@@ -137,9 +142,14 @@ is byte-identical to its JSON `context`, and the directory's filenames do not no
 `.txt` and grading against JSON offsets would shift every overlap silently.
 
 Splitting the JSON `context` at line-start item markers gives **3,669 clauses** over the 53
-documents, against the 3,244 measured earlier with a slightly stricter marker pattern. The largest
-clause reproduces exactly, at **16,176 words**, and **31 of the 53 documents** hold a clause over 600
-words.
+documents, against the 3,244 measured earlier. The difference is the marker pattern, not the data:
+this count accepts a bare `(A)` and a trailing-dot `1.` that the earlier probe did not. Treat both as
+the same measurement to within the marker definition, which ticket 03 settles. The largest clause
+reproduces exactly, at **16,176 words**.
+
+**31 of the 53 documents** hold at least one clause over 600 words. That is consistent with the 91
+oversized clauses counted below, which are those 91 clauses spread across those 31 documents — the
+two figures count different things, clauses and documents.
 
 **The line structure is a page artefact, and in some documents it is absent.** Newlines sit at page
 boundaries, not at item boundaries: 21,172 newlines across 2,990,822 characters, so a "line" is

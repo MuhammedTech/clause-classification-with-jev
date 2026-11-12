@@ -12,12 +12,8 @@ from typing import Iterable, Mapping, Sequence
 
 from .domain import Clause, Highlight, holds
 
+#: A Clause's identity across the corpus: its document plus its span. See `Clause.key`.
 ClauseKey = tuple[str, str]
-
-
-def clause_key(clause: Clause) -> ClauseKey:
-    """Identifies a Clause across the corpus: its document plus its span."""
-    return (clause.doc_id, clause.span_key)
 
 
 def _share(numerator: int, denominator: int) -> float | None:
@@ -41,8 +37,6 @@ class RuleMetrics:
     highlights: int
     lost_provisions: int
 
-    escalated_holding: int
-
     total_words: int
     binned_words: int
 
@@ -58,8 +52,12 @@ class RuleMetrics:
 
     @property
     def precision(self) -> float | None:
-        """Of Escalated Clauses, the share holding a Highlight."""
-        return _share(self.escalated_holding, self.escalated_clauses)
+        """Of Escalated Clauses, the share holding a Highlight.
+
+        The numerator is `holding_escalated`: an Escalated Clause that holds a Highlight and a
+        holding Clause that is Escalated are the same set.
+        """
+        return _share(self.holding_escalated, self.escalated_clauses)
 
     @property
     def binned_share(self) -> float | None:
@@ -68,7 +66,11 @@ class RuleMetrics:
 
     @property
     def base_rate(self) -> float | None:
-        """The share of Clauses holding a Highlight. Precision is bounded by this."""
+        """The share of Clauses holding a Highlight.
+
+        This is what Precision reads when every Clause is Escalated, which is why Precision reads
+        in single digits at any useful Cutoff (ADR-0003).
+        """
         return _share(self.holding_clauses, self.clauses)
 
 
@@ -79,7 +81,7 @@ def evaluate_rule(
     p_yes: Mapping[ClauseKey, float],
     cutoff: float,
 ) -> RuleMetrics:
-    """Score one Rule at one Cutoff.
+    """Evaluate one Rule at one Cutoff.
 
     A Pair whose P(yes) is at or below `cutoff` is Binned; above it, Escalated.
     """
@@ -87,13 +89,12 @@ def evaluate_rule(
 
     escalated: dict[ClauseKey, bool] = {}
     for clause in clauses:
-        key = clause_key(clause)
-        if key not in p_yes:
-            raise KeyError(f"Clause {key} has no P(yes) for rule {rule_id}")
-        escalated[key] = p_yes[key] > cutoff
+        if clause.key not in p_yes:
+            raise KeyError(f"Clause {clause.key} has no P(yes) for rule {rule_id}")
+        escalated[clause.key] = p_yes[clause.key] > cutoff
 
     def is_escalated(clause: Clause) -> bool:
-        return escalated[clause_key(clause)]
+        return escalated[clause.key]
 
     total_words = sum(c.word_count for c in clauses)
     binned_words = sum(c.word_count for c in clauses if not is_escalated(c))
@@ -101,14 +102,11 @@ def evaluate_rule(
 
     holding_clauses = 0
     holding_escalated = 0
-    escalated_holding = 0
     for clause in clauses:
-        clause_holds = any(holds(clause, h) for h in highlights)
-        if clause_holds:
+        if any(holds(clause, h) for h in highlights):
             holding_clauses += 1
             if is_escalated(clause):
                 holding_escalated += 1
-                escalated_holding += 1
 
     lost_provisions = 0
     for highlight in highlights:
@@ -132,7 +130,6 @@ def evaluate_rule(
         holding_escalated=holding_escalated,
         highlights=len(highlights),
         lost_provisions=lost_provisions,
-        escalated_holding=escalated_holding,
         total_words=total_words,
         binned_words=binned_words,
     )

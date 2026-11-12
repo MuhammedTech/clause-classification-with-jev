@@ -18,7 +18,7 @@ from .corpus import load_corpus
 from .domain import Clause, Highlight
 from .evaluator import RuleMetrics, evaluate_rule
 from .jev import JevClient, StubJevClient
-from .report import ReportInputs, render
+from .report import DocumentSummary, ReportInputs, render
 from .rulebook import Rule, rule
 from .runner import RunStats, run_pairs
 from .splitter import split_document
@@ -35,6 +35,9 @@ TRACER_DOC_IDS = (
 )
 
 DEFAULT_CUTOFF = 0.5
+
+#: Ticket 01 scores one Rule. The other six arrive with the full run.
+DEFAULT_RULE_IDS = ("R1",)
 
 
 @dataclass(frozen=True)
@@ -53,7 +56,7 @@ class RunResult:
 def run(
     client: JevClient | None = None,
     doc_ids: Sequence[str] = TRACER_DOC_IDS,
-    rule_ids: Sequence[str] = ("R1",),
+    rule_ids: Sequence[str] = DEFAULT_RULE_IDS,
     cutoff: float = DEFAULT_CUTOFF,
     out_dir: Path | None = None,
     cuad_directory: Path | None = None,
@@ -69,21 +72,21 @@ def run(
 
     clauses: list[Clause] = []
     highlights: list[Highlight] = []
-    doc_rows: list[tuple[str, int, int]] = []
+    doc_rows: list[DocumentSummary] = []
     for document in documents:
         document_clauses = split_document(document.doc_id, document.text)
         clauses.extend(document_clauses)
         highlights.extend(document.highlights)
         doc_rows.append(
-            (
-                document.doc_id,
-                len(document_clauses),
-                sum(c.word_count for c in document_clauses),
+            DocumentSummary(
+                doc_id=document.doc_id,
+                clauses=len(document_clauses),
+                words=sum(c.word_count for c in document_clauses),
             )
         )
 
     cache_path = out_dir / "pyes.jsonl"
-    table, stats = run_pairs(clauses, rules, client, cache_path, with_stats=True)
+    table, stats = run_pairs(clauses, rules, client, cache_path)
 
     metrics = tuple(
         evaluate_rule(
@@ -104,11 +107,7 @@ def run(
             cutoff=cutoff,
             model_version=client.model_version,
             documents=doc_rows,
-            highlight_totals={
-                r.id: sum(1 for h in highlights if h.rule_id == r.id) for r in rules
-            },
-            is_stub=isinstance(client, StubJevClient)
-            or "stub" in client.model_version.lower(),
+            is_stub=client.is_stub,
         )
     )
 

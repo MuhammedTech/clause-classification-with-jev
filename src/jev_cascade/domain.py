@@ -55,10 +55,25 @@ class Clause:
         """Identifies the Clause inside its document, for the P(yes) cache key."""
         return f"{self.start}-{self.end}"
 
+    @property
+    def key(self) -> tuple[str, str]:
+        """Identifies the Clause across the corpus: its document plus its span."""
+        return (self.doc_id, self.span_key)
+
 
 def holds(clause: Clause, highlight: Highlight) -> bool:
     """A Clause holds a Highlight when their character ranges overlap by one character or more.
 
-    Pure arithmetic, no threshold. Spans are half-open, so touching ranges do not overlap.
+    Pure arithmetic, no threshold.
+
+    Offsets are only comparable **within one document**, so a Clause and a Highlight from
+    different documents never hold, however their ranges line up. Pooling several documents into
+    one evaluation without this check silently invents overlaps: on the three tracer documents it
+    produced six false holding relations against four real ones, two of them inside a Certified
+    Negative document, which by definition holds nothing.
+
+    Spans are half-open, so ranges that merely abut share no character and do not overlap.
     """
+    if clause.doc_id != highlight.doc_id:
+        return False
     return max(clause.start, highlight.start) < min(clause.end, highlight.end)

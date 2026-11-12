@@ -33,7 +33,7 @@ def test_the_join_key_matches_pacira_across_its_ampersand():
 
 
 def test_the_three_filters_give_three_different_counts():
-    # Kept as an assertion so the difference between the 53, the 44 and the 44 stays documented.
+    # Asserted so the difference between the 53, the 44 and the 44 stays documented.
     assert filter_counts() == {
         "csv_document_name": 53,
         "csv_filename": 44,

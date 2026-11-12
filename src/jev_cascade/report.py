@@ -18,6 +18,15 @@ from .runner import RunStats
 
 
 @dataclass(frozen=True)
+class DocumentSummary:
+    """One row of the report's document table."""
+
+    doc_id: str
+    clauses: int
+    words: int
+
+
+@dataclass(frozen=True)
 class ReportInputs:
     """Everything the report prints, so rendering stays a pure function of its inputs."""
 
@@ -26,12 +35,12 @@ class ReportInputs:
     stats: RunStats
     cutoff: float
     model_version: str
-    documents: Sequence[tuple[str, int, int]]  # doc_id, clauses, words
-    highlight_totals: dict[str, int]
+    documents: Sequence[DocumentSummary]
     is_stub: bool
 
 
-def _share(value: float | None) -> str:
+def _format_share(value: float | None) -> str:
+    """Render a share, or "n/a" where the denominator was empty."""
     return "n/a" if value is None else f"{value * 100:.1f}%"
 
 
@@ -46,9 +55,10 @@ def render(inputs: ReportInputs) -> str:
 
     lines.append("# Jev cascade: tracer bullet")
     lines.append("")
+    rule_names = ", ".join(r.id for r in inputs.rules)
     lines.append(
-        f"One Rule, {len(inputs.documents)} documents, end to end on the **{label}** Jev client at "
-        f"a single fixed Cutoff of **{inputs.cutoff:g}**."
+        f"{rule_names} over {len(inputs.documents)} documents, end to end on the **{label}** Jev "
+        f"client at a single fixed Cutoff of **{inputs.cutoff:g}**."
     )
     lines.append("")
 
@@ -65,8 +75,8 @@ def render(inputs: ReportInputs) -> str:
     lines.append("| | |")
     lines.append("| --- | --- |")
     lines.append(f"| Documents | {len(inputs.documents)} |")
-    lines.append(f"| Clauses | {sum(c for _, c, _ in inputs.documents)} |")
-    lines.append(f"| Words | {sum(w for _, _, w in inputs.documents)} |")
+    lines.append(f"| Clauses | {sum(d.clauses for d in inputs.documents)} |")
+    lines.append(f"| Words | {sum(d.words for d in inputs.documents)} |")
     lines.append(f"| Rules asked | {len(inputs.rules)} |")
     lines.append(f"| Pairs | {inputs.stats.pairs} |")
     lines.append(f"| Jev calls made | {inputs.stats.calls_made} |")
@@ -80,8 +90,8 @@ def render(inputs: ReportInputs) -> str:
     lines.append("")
     lines.append("| Document | Clauses | Words |")
     lines.append("| --- | --- | --- |")
-    for doc_id, clauses, words in inputs.documents:
-        lines.append(f"| {doc_id} | {clauses} | {words} |")
+    for document in inputs.documents:
+        lines.append(f"| {document.doc_id} | {document.clauses} | {document.words} |")
     lines.append("")
 
     for rule, metric in zip(inputs.rules, inputs.metrics):
@@ -95,25 +105,30 @@ def render(inputs: ReportInputs) -> str:
         lines.append("| --- | --- | --- |")
         lines.append(
             f"| Clause Recall | {_count_pair(metric.holding_escalated, metric.holding_clauses)} "
-            f"holding Clauses Escalated | {_share(metric.clause_recall)} |"
+            f"holding Clauses Escalated | {_format_share(metric.clause_recall)} |"
         )
         lines.append(
-            f"| Precision | {_count_pair(metric.escalated_holding, metric.escalated_clauses)} "
-            f"Escalated Clauses hold a Highlight | {_share(metric.precision)} |"
+            f"| Precision | {_count_pair(metric.holding_escalated, metric.escalated_clauses)} "
+            f"Escalated Clauses hold a Highlight | {_format_share(metric.precision)} |"
         )
         lines.append(
-            f"| Lost Provisions | {metric.lost_provisions} of {metric.highlights} Highlights | "
-            f"{_share(None if not metric.highlights else metric.lost_provisions / metric.highlights)} |"
+            f"| Provision Recall | "
+            f"{_count_pair(metric.highlights - metric.lost_provisions, metric.highlights)} "
+            f"Highlights still reachable | {_format_share(metric.provision_recall)} |"
+        )
+        lines.append(
+            f"| Lost Provisions | {metric.lost_provisions} of {metric.highlights} Highlights had "
+            f"every holding Clause Binned | — |"
         )
         lines.append(
             f"| Binned Share | {_count_pair(metric.binned_words, metric.total_words)} words "
-            f"Binned | {_share(metric.binned_share)} |"
+            f"Binned | {_format_share(metric.binned_share)} |"
         )
         lines.append("")
         lines.append(
             f"Supporting counts: {metric.clauses} Clauses, {metric.binned_clauses} Binned and "
             f"{metric.escalated_clauses} Escalated; {metric.holding_clauses} hold a Highlight, a "
-            f"base rate of {_share(metric.base_rate)}."
+            f"base rate of {_format_share(metric.base_rate)}."
         )
         lines.append("")
         lines.append(

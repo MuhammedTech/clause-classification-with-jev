@@ -18,14 +18,14 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 from .domain import Clause
-from .evaluator import ClauseKey
 from .jev import JevClient
 from .rulebook import QUESTION_TYPE, Rule
 
 #: A cached answer is identified by document, Clause span, Rule, question type and model version.
 PairKey = tuple[str, int, int, str, str, str]
 
-PYesTable = dict[str, dict[ClauseKey, float]]
+#: P(yes) by Rule id, then by Clause key (document plus span).
+PYesTable = dict[str, dict[tuple[str, str], float]]
 
 
 @dataclass(frozen=True)
@@ -81,17 +81,33 @@ def read_cache(path: Path) -> dict[PairKey, float]:
     return answers
 
 
+def _close_dangling_line(path: Path) -> None:
+    """Terminate a half-written final line before appending to it.
+
+    A run killed mid-write leaves a line with no newline. Appending straight onto it would glue
+    the next answer to the fragment, making that row unparseable too, so the Pair would be asked
+    again on every later run.
+    """
+    if not path.exists() or path.stat().st_size == 0:
+        return
+    with path.open("rb") as handle:
+        handle.seek(-1, 2)
+        if handle.read(1) == b"\n":
+            return
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("\n")
+
+
 def run_pairs(
     clauses: Sequence[Clause],
     rules: Iterable[Rule],
     client: JevClient,
     cache_path: Path,
-    with_stats: bool = False,
-):
+) -> tuple[PYesTable, RunStats]:
     """Ask Jev about every (Clause, Rule) Pair, skipping any already in the cache.
 
-    Returns the P(yes) table, keyed by Rule id and then by (document, Clause span). With
-    `with_stats` it returns `(table, RunStats)`.
+    Returns the P(yes) table — keyed by Rule id, then by (document, Clause span) — and the run's
+    counts and wall clock.
     """
     rules = list(rules)
     cache_path = Path(cache_path)
@@ -99,6 +115,7 @@ def run_pairs(
 
     cached = read_cache(cache_path)
     model_version = client.model_version
+    _close_dangling_line(cache_path)
 
     table: PYesTable = {rule.id: {} for rule in rules}
     calls_made = 0
@@ -111,7 +128,7 @@ def run_pairs(
                 key = _key(clause, rule, model_version)
                 if key in cached:
                     cache_hits += 1
-                    table[rule.id][(clause.doc_id, clause.span_key)] = cached[key]
+                    table[rule.id][clause.key] = cached[key]
                     continue
 
                 p_yes = client.p_yes(
@@ -142,7 +159,7 @@ def run_pairs(
                 handle.flush()
 
                 cached[key] = p_yes
-                table[rule.id][(clause.doc_id, clause.span_key)] = p_yes
+                table[rule.id][clause.key] = p_yes
 
     stats = RunStats(
         pairs=len(clauses) * len(rules),
@@ -150,4 +167,4 @@ def run_pairs(
         cache_hits=cache_hits,
         seconds=time.monotonic() - started,
     )
-    return (table, stats) if with_stats else table
+    return table, stats

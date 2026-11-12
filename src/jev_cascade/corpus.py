@@ -83,7 +83,7 @@ def _license_rows(csv_path: Path) -> list[dict[str, str]]:
 
 
 def filter_counts(directory: Path | None = None) -> dict[str, int]:
-    """The three filters that give three different counts, kept so the difference stays documented."""
+    """The three filters that give three different counts, so the difference stays documented."""
     directory = directory or config.cuad_dir()
     with config.master_clauses_csv(directory).open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))

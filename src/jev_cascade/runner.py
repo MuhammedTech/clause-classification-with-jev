@@ -177,7 +177,9 @@ def run_pairs(
                             "rule_id": rule.id,
                             "question_type": QUESTION_TYPE,
                             "model_version": model_version,
-                            "prompt_fingerprint": key[-1],
+                            "prompt_fingerprint": prompt_fingerprint(
+                                clause.parent_line, clause.text
+                            ),
                             "question": rule.detection_question,
                             "p_yes": p_yes,
                         },

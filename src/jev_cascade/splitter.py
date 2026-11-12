@@ -59,6 +59,16 @@ HEADING_MAX_WORDS = 8
 WORD_CEILING = 600
 
 
+def _is_lettered(marker: str) -> bool:
+    """Whether a marker is `(a)` or `(iv)` rather than numbered.
+
+    `ITEM_MARKER` carries its indentation, so the marker text of an indented item is `"  (a)"`. The
+    strip lives here, once, because a check made on the raw text silently treats every indented
+    lettered item as a numbered one.
+    """
+    return marker.strip().startswith("(")
+
+
 @dataclass(frozen=True)
 class _Region:
     """One cut of the document before headings are merged and Parent Lines assigned."""
@@ -80,27 +90,28 @@ def _cut_points(text: str) -> list[int]:
     return cuts
 
 
-def _first_line(segment: str) -> str:
+def _first_line(region_text: str) -> str:
     """The region's own opening line, which is what it offers its children as a Parent Line."""
-    for line in segment.splitlines():
+    for line in region_text.splitlines():
         if line.strip():
             return line.strip()
     return ""
 
 
-def _is_heading_shape(segment: str, marker: str | None) -> bool:
+def _is_heading_shape(region_text: str, marker: str | None) -> bool:
     """Whether the region reads as a section heading rather than a provision.
 
     A heading is a single line carrying a marker and a short label. Two things are deliberately
     **not** headings:
 
-    - a line ending in a colon, which is a Parent Line. ADR-0004 grades a lead-in-only Highlight on
-      the lead-in Clause alone, so the lead-in has to keep a Clause of its own.
+    - a line ending in a colon, which is a Parent Line. ADR-0004 grades a Highlight lying only in a
+      Parent Line on the Clause that holds it, so a line introducing a list has to keep a Clause of
+      its own.
     - anything longer than `HEADING_MAX_WORDS`, which is what keeps one-line definitions whole.
     """
     if marker is None:
         return False
-    lines = [line for line in segment.splitlines() if line.strip()]
+    lines = [line for line in region_text.splitlines() if line.strip()]
     if len(lines) != 1:
         return False
     label = lines[0].strip()[len(marker.strip()) :].strip()
@@ -119,7 +130,7 @@ def _depth_of(marker: str | None, numeric_depth: int) -> int:
     """
     if marker is None:
         return 0
-    if marker.startswith("("):
+    if _is_lettered(marker):
         return numeric_depth + 1
     return marker.strip().rstrip(".").count(".") + 1
 
@@ -132,11 +143,11 @@ def _regions(text: str) -> list[_Region]:
     regions: list[_Region] = []
     numeric_depth = 0
     for start, end in bounds:
-        segment = text[start:end]
-        match = ITEM_MARKER.match(segment)
+        region_text = text[start:end]
+        match = ITEM_MARKER.match(region_text)
         marker = match.group(0) if match else None
         depth = _depth_of(marker, numeric_depth)
-        if marker is not None and not marker.strip().startswith("("):
+        if marker is not None and not _is_lettered(marker):
             numeric_depth = depth
         regions.append(
             _Region(
@@ -144,8 +155,8 @@ def _regions(text: str) -> list[_Region]:
                 end=end,
                 marker=marker,
                 depth=depth,
-                first_line=_first_line(segment),
-                is_heading_shape=_is_heading_shape(segment, marker),
+                first_line=_first_line(region_text),
+                is_heading_shape=_is_heading_shape(region_text, marker),
             )
         )
     return regions
@@ -191,22 +202,22 @@ def _leading_number(marker: str) -> str:
     return match.group(0) if match else ""
 
 
-def _parent_text(region: _Region, candidate: _Region | None) -> str:
-    """The line `region` sits under, given the nearest shallower marked region above it.
+def _parent_text(marker: str, candidate: _Region | None) -> str:
+    """The line an item with `marker` sits under, given the nearest shallower marked region above.
 
     A lettered item sits under whatever shallower item holds it. A **numbered** item only does when
     the numbering agrees: `6.2` sits under `6.`, but `7.2` after a missing `7.` does not, because
     the nearest shallower item is then `6. Term and Termination.` and naming it would stamp the
     wrong section onto the Clause. Measured over the corpus, the depth rule alone picked a parent
-    with a different leading number for 301 of 666 numbered items under a numbered ancestor. A wrong
+    with a different leading number for 362 of 750 numbered items under a numbered ancestor. A wrong
     section label is worse than none, so those get an empty Parent Line.
     """
     if candidate is None:
         return ""
-    if not region.marker.strip().startswith("("):  # type: ignore[union-attr]
-        if candidate.marker is None or candidate.marker.strip().startswith("("):
+    if not _is_lettered(marker):
+        if candidate.marker is None or _is_lettered(candidate.marker):
             return ""
-        if _leading_number(region.marker) != _leading_number(candidate.marker):  # type: ignore[arg-type]
+        if _leading_number(marker) != _leading_number(candidate.marker):
             return ""
     return candidate.first_line
 
@@ -226,7 +237,7 @@ def _parent_lines(regions: list[_Region]) -> list[str]:
             continue
         while stack and stack[-1].depth >= region.depth:
             stack.pop()
-        parents.append(_parent_text(region, stack[-1] if stack else None))
+        parents.append(_parent_text(region.marker, stack[-1] if stack else None))
         stack.append(region)
     return parents
 
@@ -285,7 +296,8 @@ def _segments(text: str, start: int, end: int, pattern: re.Pattern[str]) -> list
     """Cut `[start, end)` after every match of `pattern`, never leaving a blank segment.
 
     A segment with no words is joined to the one after it, or to the one before it when it is last,
-    so no piece of a split is empty or whitespace-only.
+    so no piece of a split is empty or whitespace-only. The span must contain at least one word,
+    which the caller guarantees by only cutting text that is over the ceiling.
     """
     cuts = [m.end() for m in pattern.finditer(text, start, end) if start < m.end() < end]
     bounds = [start, *cuts, end]
@@ -299,10 +311,7 @@ def _segments(text: str, start: int, end: int, pattern: re.Pattern[str]) -> list
             continue
         segments.append((left, right))
     if carried is not None:
-        if segments:
-            segments[-1] = (segments[-1][0], end)
-        else:
-            segments = [(start, end)]
+        segments[-1] = (segments[-1][0], end)
     return segments
 
 
@@ -314,10 +323,12 @@ def _split_oversized(
     Segments are packed greedily at the current cut level. A single segment that is itself over
     the ceiling is recursed to the next level, so a block with no paragraph break falls through to
     sentences and then to words.
+
+    The recursion ends by itself: the last cut level leaves one word in every segment, and a word is
+    never over a ceiling of at least 1, so `level` cannot run past `_CUT_LEVELS`. If it ever did,
+    the `IndexError` is wanted over a silently oversized Clause.
     """
     if _word_count(text, start, end) <= ceiling:
-        return [(start, end)]
-    if level >= len(_CUT_LEVELS):  # pragma: no cover - the last level cuts after every word
         return [(start, end)]
 
     segments = _segments(text, start, end, _CUT_LEVELS[level])

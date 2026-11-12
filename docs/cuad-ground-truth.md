@@ -217,30 +217,37 @@ the marker nesting and the oversized split at **600 words**, all 53 documents gi
 
 | | Before the oversized split | After it |
 | --- | --- | --- |
-| Clauses | 3,004 | **3,257** |
-| Median words | 66 | 72 |
-| Mean words | 149.0 | 137.4 |
-| 90th percentile words | 315 | 429 |
+| Clauses | 2,993 | **3,246** |
+| Median words | 66 | 73 |
+| Mean words | 149.6 | 137.9 |
+| 90th percentile words | 315 | 430 |
 | Largest, in words | 16,176 | **600** |
 | Clauses over 600 words | 92 | **0** |
 
 The three marker-pattern counts above (3,244, 3,669, 3,130 regions) all precede the heading merge,
-which is why 3,004 is lower than any of them. The oversized split adds 253 Clauses and moves the
+which is why 2,993 is lower than any of them. The oversized split adds 253 Clauses and moves the
 median and the 90th percentile up; the splitter packs greedily up to the ceiling, so many of the
 new pieces sit close to it (the per-document table shows documents whose largest Clause is 598 or
 600 words). The cause of the median's rise was not isolated. `tests/test_partition.py` asserts the
 partition, the ceiling and that no Highlight is held by zero Clauses, over all 53 documents.
 
-**Parent Lines add 9.6% more words** for Jev to read per Rule: 985 of the 3,257 Clauses carry one,
-42,794 words over 447,653 words of Clause text. Their distribution is lopsided: the 99th percentile
-is 378 words and the largest is **801**, because where a page is one line the first line of an item
-is that page. Ticket 06 turns this into tokens; there is no tokenizer in the code.
+**Parent Lines add 16.2% more words** for Jev to read per Rule: 1,269 of the 3,246 Clauses carry one,
+72,545 words over 447,653 words of Clause text. Over those 1,269 Clauses the median Parent Line is 6
+words, but 259 are over 60 words, the 99th percentile is 578 and the largest is **801**, because
+where a page is one line the first line of an item is that page. Ticket 06 turns this into tokens;
+there is no tokenizer in the code.
 
-**The depth rule alone gives wrong Parent Lines.** For 301 of 666 numbered items beneath a numbered
+An earlier version of this section said 9.6%, from 985 Clauses. A review found the splitter read an
+indented lettered marker (`"  (a)"`) as a numbered one, so indented lettered items got no Parent Line;
+fixing it added 284 Clauses with one. Everything above is re-measured after that fix.
+
+**The depth rule alone gives wrong Parent Lines.** For 362 of 750 numbered items beneath a numbered
 ancestor, the nearest shallower item has a different leading number (`7.2` with no `7.` above it
 lands under `6. Term and Termination.`). The splitter requires the numbering to agree for a numbered
 item and gives it no Parent Line otherwise, on the ground that a wrong section label is worse than an
-empty one. Lettered items use the depth rule alone, which cannot be checked this way.
+empty one. Lettered items use the depth rule alone, which cannot be checked this way. These two
+figures count numbered markers before the heading merge and the oversized split, so they are not
+comparable with the Clause counts above.
 
 ## Highlights sit inside one clause 98.8% of the time
 
@@ -256,14 +263,14 @@ two was not chased.
 
 | | |
 | --- | --- |
-| Clauses (final partition) | 3,257 |
+| Clauses (final partition) | 3,246 |
 | Rules | 7 |
-| Jev calls | 22,799 |
+| Jev calls | 22,722 |
 | Wall clock at ~1,200 req/min | ~20 minutes |
 | Jev cost at $0.042 per million input tokens | ~$0.20 (not recomputed) |
 
 The 22,708 recorded earlier was 3,244 clauses times 7, so it moves with the partition: the final
-partition gives 3,257 times 7. The cost figure was not re-derived, and the 9.6% extra words from
+partition gives 3,246 times 7. The cost figure was not re-derived, and the 16.2% extra words from
 Parent Lines are not in it; ticket 06 counts tokens properly. The price is from one unverified
 third-party blog and must be confirmed when the key arrives.
 

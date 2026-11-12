@@ -84,33 +84,45 @@ a page; measured, 21,225 lines over 2,990,822 characters is a **mean of 140 char
 page-long lines are confined to a few documents rather than typical. The oversized split needs its
 newline-free fallback for **4** of the 92 oversized Clauses; the other 88 do contain a newline.
 
-**2026-11-12, resolved.** Suite green at 136 tests, no xfail. What the last two passes settled:
+**2026-11-12, resolved.** Suite green at 137 tests, no xfail. What the last two passes settled, with
+the figures re-measured after a review found a bug (below):
 
 - **Parent Lines come from a depth stack, with a numbering check.** The depth rule alone named the
-  wrong section for 301 of 666 numbered items under a numbered ancestor (`7.2` with no `7.` above it
+  wrong section for 362 of 750 numbered items under a numbered ancestor (`7.2` with no `7.` above it
   landed under `6. Term and Termination.`). A numbered item now takes a Parent Line only when its
   leading number matches the ancestor's, and none otherwise. Lettered items use the depth rule alone.
   A merged heading Clause takes the heading's own Parent Line, since its words are already in it. The
   pieces of a split Clause keep the whole Clause's Parent Line. The strict xfail flipped and its marker
   is gone.
 - **The oversized split cuts at paragraph break, line break, sentence end, then word break**, recursing
-  a lone oversized segment down a level, so the ceiling is always reached. `word_ceiling` is a
+  a lone oversized piece down a level, so the ceiling is always reached. `word_ceiling` is a
   parameter of `split_document` so short real excerpts can stand in for 600-word blocks.
   `WORD_CEILING` is 600 and the glossary now defines it.
-- **Final partition, all 53 documents:** 3,257 Clauses, none over 600 words (92 were before the split),
+- **Final partition, all 53 documents:** 3,246 Clauses, none over 600 words (92 were before the split),
   largest 600 where it was 16,176, and **424 of 429 Highlights inside exactly one Clause (98.8%)**.
   Full table in `docs/cuad-ground-truth.md`. The 98.8% is reported, not asserted.
-- **Parent Lines add 9.6% more words** for Jev to read per Rule. Their tail is long: the largest is 801
-  words, where a page is one line. I did not cap them: 187 of 1,485 parents measured over 60 words and
-  many are real lead-ins, so a cap would cut genuine context. Ticket 06 should cost it; ticket 08 can
-  decide whether the heading helps at this price.
+- **Parent Lines add 16.2% more words** for Jev to read per Rule: 1,269 of the 3,246 Clauses carry
+  one. Their tail is long: over those 1,269, 259 are over 60 words and the largest is 801 words, where
+  a page is one line. I did not cap them: many long ones are genuine Parent Lines, so a cap would cut
+  real context. Ticket 06 should cost it; ticket 08 can decide whether the heading helps at this price.
+- **A bug found in review, fixed before closing:** the marker pattern carries indentation, so an
+  indented lettered item (`"  (a)"`) was read as numbered, got depth 1 and no Parent Line. A test with
+  an indented list now covers it, and one `_is_lettered` helper replaces four repeated checks. It moved
+  the figures: Clauses with a Parent Line went from 985 to 1,269, and the growth from 9.6% to 16.2%.
+  Every excerpt test had used column-0 markers, which is why nothing caught it.
+- **Not built: unnumbered headings.** ADR-0004's own examples, `ARTICLE IX` and
+  `Section 9 · Limitation of Liability`, carry no item marker, so the splitter does not treat them as
+  headings. Such a line stays glued to the tail of the Clause above it, and the list beneath it gets no
+  Parent Line. This is the "cleverer marker detection" the ticket says is not needed, and the
+  Partition section's per-document table is where a document that suffers shows up. It is the
+  main gap left in this ticket, and it is the user's call whether to add it.
 - **The report's partition section is corpus-wide**, not scoped to the documents a run scores, because
   the tracer documents were chosen for splitting cleanly and would show nothing.
 - **Cost of Hertz's page-line was smaller than feared:** it yields 5 Clauses and none oversized. The 4
   newline-free oversized Clauses are all in Ehave.
 
 Corrections made to `docs/cuad-ground-truth.md`: a line averages **141 characters**, not a page, and
-the run size is 3,257 × 7 = **22,799** calls, not 22,708. The cost figure was not re-derived.
+the run size is 3,246 × 7 = **22,722** calls, not 22,708. The cost figure was not re-derived.
 
 Not done, because outside this ticket: no type checker is configured in `pyproject.toml`, so none was
 run.

@@ -102,7 +102,8 @@ Good tests check behaviour at a seam, with inputs and expected outputs a person 
 ## Further notes
 
 - The Jev key comes from the user. Everything runs on the stub until then.
-- The whole run is 22,708 Jev calls, about 20 minutes and roughly $0.20.
+- The whole run is 22,722 Jev calls (3,246 Clauses × 7 Rules), about 20 minutes and roughly $0.20.
+  The cost was not re-derived after the Parent Lines added about 16% more words per call.
 - Third-party findings worth citing: tuned cutoffs matter a lot (Arize); 34.7% escalation for Jev
   against 2.7% for Haiku (wotai.co); splitting compound questions lifted accuracy from 62.6% to 95%
   and probabilities needed recalibrating per question (Beri); the same question asked as different

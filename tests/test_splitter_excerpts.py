@@ -19,13 +19,13 @@ IDEANOMICS_DEFINITIONS = (
     '(b) "Advertising" shall have the meaning specified in Section 9.\n\n'
 )
 
-COHERUS_LEAD_IN = "1.74 Interpretation. In this Agreement, unless the context otherwise requires:"
+COHERUS_PARENT_LINE = "1.74 Interpretation. In this Agreement, unless the context otherwise requires:"
 COHERUS_ITEM_A = (
     "(a) headings do not affect the interpretation of this Agreement; the singular shall include "
     "the plural and vice versa; and references to one gender include all genders;\n\n"
 )
 COHERUS_INTERPRETATION = (
-    COHERUS_LEAD_IN
+    COHERUS_PARENT_LINE
     + "\n\n"
     + COHERUS_ITEM_A
     + "(b) references to EUR or € are references to the lawful currency from time to time in "
@@ -61,16 +61,16 @@ def test_a_real_heading_over_lettered_items_hands_its_words_to_the_first_item():
     assert clauses[1].parent_line == "1. Definitions."
 
 
-def test_a_lettered_list_sits_under_its_lead_in_not_under_its_sibling():
+def test_a_lettered_list_sits_under_its_parent_line_not_under_its_sibling():
     clauses = split_document("C", COHERUS_INTERPRETATION)
     assert len(clauses) == 3
-    assert clauses[0].text.strip() == COHERUS_LEAD_IN
-    assert clauses[1].parent_line == COHERUS_LEAD_IN
-    assert clauses[2].parent_line == COHERUS_LEAD_IN
+    assert clauses[0].text.strip() == COHERUS_PARENT_LINE
+    assert clauses[1].parent_line == COHERUS_PARENT_LINE
+    assert clauses[2].parent_line == COHERUS_PARENT_LINE
 
 
 def test_a_dotted_item_after_a_numbering_gap_takes_no_parent_line():
-    # Measured on the corpus: 301 of 666 dotted items beneath a numbered ancestor would be given a
+    # Measured on the corpus: 362 of 750 dotted items beneath a numbered ancestor would be given a
     # section whose number is not theirs, `7.2` under `6. Term and Termination.`. A wrong section
     # label is worse than an empty one, and ticket 08 measures what the heading does.
     text = (
@@ -83,6 +83,15 @@ def test_a_dotted_item_after_a_numbering_gap_takes_no_parent_line():
     assert clauses[1].parent_line == "6. Term and Termination."
     assert clauses[2].text.startswith("7.2")
     assert clauses[2].parent_line == ""
+
+
+def test_an_indented_lettered_list_sits_under_its_item_like_an_unindented_one():
+    # The marker pattern allows indentation, so the marker text is "  (a)". Reading its depth must
+    # not depend on the indent: found in review, where indented items got depth 1 and no Parent Line.
+    text = "1. Licensee commits to:\n  (a) pay fees.\n  (b) report.\n"
+    clauses = split_document("D", text)
+    parent_text = "1. Licensee commits to:"
+    assert [c.parent_line for c in clauses] == ["", parent_text, parent_text]
 
 
 def test_siblings_across_a_whole_section_share_the_heading_as_their_parent_line():
@@ -118,9 +127,9 @@ def test_an_oversized_clause_with_no_paragraph_break_falls_back_to_sentences():
 def test_the_pieces_of_a_split_clause_share_the_parent_line_of_the_clause():
     # A continuation piece is not a new item, so it sits under the same line the whole Clause did.
     clauses = split_document("C", COHERUS_INTERPRETATION, word_ceiling=15)
-    under_lead_in = [c for c in clauses if c.parent_line]
-    assert len(under_lead_in) >= 4
-    assert {c.parent_line for c in under_lead_in} == {COHERUS_LEAD_IN}
+    under_parent_line = [c for c in clauses if c.parent_line]
+    assert len(under_parent_line) >= 4
+    assert {c.parent_line for c in under_parent_line} == {COHERUS_PARENT_LINE}
 
 
 def test_a_page_that_is_one_line_is_split_with_no_newline_or_punctuation_to_use():

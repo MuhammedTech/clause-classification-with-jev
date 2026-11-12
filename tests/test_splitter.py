@@ -148,9 +148,9 @@ def test_a_short_item_followed_by_a_sibling_is_not_a_heading():
     assert clauses[0].text.startswith('1.49 "Field"')
 
 
-def test_a_lead_in_is_not_a_heading():
-    # "Licensee commits to:" is a Parent Line, and ADR-0004 grades a lead-in-only Highlight on the
-    # lead-in Clause alone, so the lead-in must keep a Clause of its own.
+def test_a_line_introducing_a_list_is_not_a_heading():
+    # "Licensee commits to:" is a Parent Line, and ADR-0004 grades a Highlight lying only in a
+    # Parent Line on the Clause that holds it, so the Parent Line must keep a Clause of its own.
     text = "2. Licensee commits to:\n(a) pay the fees.\n(b) report quarterly.\n"
     clauses = split_document("D", text)
     assert len(clauses) == 3

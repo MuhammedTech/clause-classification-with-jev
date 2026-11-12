@@ -77,3 +77,22 @@ it both ways on a sample before the full run rather than deciding now.
   automatic loss.
 - **Word-count chunks as the primary unit.** Rejected: a dry run moved Anti-Assignment by 11
   highlights, and Clauses are the unit a lawyer recognises.
+
+## Amendment, 2026-11-12: what ticket 03 settled
+
+These extend the decision above without reversing it. The text above is left as written, including
+its use of "lead-in", which the glossary has since renamed Parent Line.
+
+- **The oversized split cuts at more than paragraph breaks.** The order is paragraph break, line
+  break, sentence end, then word break. A paragraph break is not always there: newlines in the CUAD
+  `context` sit at page boundaries, and 4 of the 92 oversized Clauses have none to cut at. The last
+  level cuts after every word, so the Word Ceiling is always reached.
+- **A Parent Line can be empty.** A numbered item takes one only when its leading number matches
+  the item above it, so `7.2` with no `7.` above it gets none instead of the wrong section. Measured,
+  the depth rule alone named a different section for 362 of 750 numbered items. A merged heading
+  Clause takes the heading's own Parent Line, and the pieces of a split Clause keep the whole
+  Clause's.
+- **Only numbered headings merge forward.** `ARTICLE IX` and `Section 9 · Limitation of Liability`,
+  this ADR's own examples, carry no item marker and are not treated as headings. That line stays at
+  the tail of the Clause above it. This was not built, because the ticket asks for no cleverer marker
+  detection, and the per-document table in the report's Partition section is where it would show.

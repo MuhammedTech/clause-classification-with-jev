@@ -202,7 +202,7 @@ def _partition_section(partition: PartitionFacts) -> list[str]:
         "",
         f"The Splitter cut **all {len(partition.documents)} documents**, whichever of them this run "
         "scored, so the documents it handles badly are visible here (ADR-0004). Every character of "
-        "each document lands in exactly one Clause, and a Clause over the word ceiling is split "
+        "each document lands in exactly one Clause, and a Clause over the Word Ceiling is split "
         f"again at paragraph breaks, then line breaks, sentence ends and word breaks, until none is "
         f"over **{ceiling} words**.",
         "",
@@ -214,7 +214,7 @@ def _partition_section(partition: PartitionFacts) -> list[str]:
         f"| Mean Clause | {partition.mean_clause_words:.1f} words |",
         f"| 90th percentile Clause | {partition.p90_clause_words} words |",
         f"| Largest Clause | {partition.largest_clause_words} words |",
-        f"| Clauses over the word ceiling | {partition.over_ceiling} |",
+        f"| Clauses over the Word Ceiling | {partition.over_ceiling} |",
         "",
         f"**Highlights inside exactly one Clause:** {partition.single_clause_highlights} of "
         f"{partition.highlights} ({_format_share(partition.single_clause_share)}). This is a "

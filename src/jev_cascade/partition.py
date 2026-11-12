@@ -74,7 +74,7 @@ class PartitionFacts:
 
     @property
     def over_ceiling(self) -> int:
-        """Clauses above the word ceiling. Zero by construction; reported because it is the
+        """Clauses above the Word Ceiling. Zero by construction; reported because it is the
         build-breaker (ADR-0004)."""
         return sum(1 for words in self.clause_word_counts if words > self.word_ceiling)
 

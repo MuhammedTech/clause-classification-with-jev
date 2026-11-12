@@ -38,7 +38,7 @@ def test_the_report_has_a_partition_section(markdown):
 def test_the_partition_section_states_the_ceiling_and_that_none_exceed_it(markdown):
     section = _section(markdown, "## Partition")
     assert "600 words" in section
-    assert "| Clauses over the word ceiling | 0 |" in section
+    assert "| Clauses over the Word Ceiling | 0 |" in section
 
 
 def test_the_partition_section_covers_all_53_documents_not_only_the_tracer_three(markdown):

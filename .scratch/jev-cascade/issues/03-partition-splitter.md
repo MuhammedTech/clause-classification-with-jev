@@ -50,3 +50,35 @@ the string the span offsets are measured against. `full_contract_txt/` is not us
 because it is incomplete — 19 files for 510 documents, only 3 of our 53 — and its files sit in
 `Part_I/`-style subdirectories. Where a file does exist it is byte-identical to the `context`, so the
 two sources do not disagree; there is just not enough of one.
+
+**2026-11-12, part way through 03.** Two of the four splitter passes are in, on branch
+`worktree-jev-cascade-01-tracer-bullet` at commit `904d0bf`. Suite green at 93 tests and the one
+strict xfail below.
+
+- **The marker is settled.** A plain integer needs its dot: `1.` cuts, a bare `1` does not, because
+  at a line start it is normally a page number, a year or a table quantity. Ticket 01's pattern cut
+  on 170 of them. The corpus moves from 3,669 Clauses to **3,130**, and Clauses over 600 words from
+  65 to **92** — the oversized split, still owed, is what brings that to zero.
+- **Headings merge forward.** A heading is a single short labelled line whose next marker is
+  **deeper**. That test is what the corpus actually supports: it separates 137 real headings
+  ("1. Definitions.") from 145 one-line definitions that read exactly like one
+  ('1.49 "Field" means the treatment of HIV in humans.') and must stay whole. A single-line test
+  alone is useless here, because a whole Clause normally sits on one line in this corpus — median 43
+  words — so it catches 2,174 of 3,130 regions. A line ending in a colon is a lead-in, not a
+  heading, and keeps its own Clause as ADR-0004 requires.
+
+Still owed: the Parent Line depth stack (which flips the strict xfail
+`test_a_sibling_item_is_not_a_parent_line`), the oversized split, the three corpus-wide tests, the
+Evaluator test for a Highlight lying only in the Parent Line, and the report's partition statistics.
+`Word Ceiling` is used by the spec, this ticket and ADR-0004 but defined in no glossary entry; it
+needs one, and the value needs pinning at 600 words, which is the only figure the ADR and
+`docs/cuad-ground-truth.md` measure against.
+
+**Ticket 10 blocks this one's correctness.** The P(yes) cache key has no Parent Line in it, so this
+ticket's Parent Line work makes an existing cache serve answers computed from a different prompt.
+See `10-cache-key-ignores-the-parent-line.md`.
+
+Two measured corrections to make while here. `docs/cuad-ground-truth.md` says a line averages about
+a page; measured, 21,225 lines over 2,990,822 characters is a **mean of 140 characters**, and the
+page-long lines are confined to a few documents rather than typical. The oversized split needs its
+newline-free fallback for **4** of the 92 oversized Clauses; the other 88 do contain a newline.

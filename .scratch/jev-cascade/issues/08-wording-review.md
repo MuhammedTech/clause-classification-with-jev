@@ -31,3 +31,10 @@ Both checks are cheap: a few hundred calls against 22,708 for the full run.
       ticket's outcome.
 - [ ] The final report discloses that both choices were made on Pairs that are later scored, a small
       selection leak.
+
+## Comments
+
+**2026-11-12, from ticket 03.** The heading-in / heading-out comparison this ticket asks for cannot
+be run until ticket 10 is fixed: the P(yes) cache key does not include the Parent Line, so the two
+arms of that comparison collide in the cache and the second is served the first's answers. See
+`10-cache-key-ignores-the-parent-line.md`.

@@ -53,9 +53,17 @@ calls are in flight (32 for the real client, 1 for the stub); it changes the spe
 | `charts.py` | The per-Rule curve PNG and the curve CSV |
 | `pipeline.py` | The stages wired together; the CLI is a thin wrapper |
 
+Ticket 08's sample (three question types, heading on against off, about 1,400 real calls) is its own
+command; it prints the plan before it asks anything and writes `docs/question-type-and-heading-sample.md`:
+
+```
+uv run jev-cascade-sample --jev real        # needs JEV_API_KEY
+uv run jev-cascade-sample --jev real --from-cache   # rebuild the report, no key and no calls
+```
+
 ## Status
 
-Tickets 01 to 07 and 11 are built. The run scores one Rule (R1) on three documents with the stub client at
+Tickets 01 to 08 and 11 are built. The run scores one Rule (R1) on three documents with the stub client at
 one fixed Cutoff plus the whole Cutoff Curve, and **every figure it prints is stub-derived and
 carries no signal** (the cost section's full-run Jev estimate is the exception: it needs no P(yes)).
 The report's

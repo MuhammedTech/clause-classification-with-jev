@@ -194,6 +194,8 @@ class _Piece:
     start: int
     end: int
     parent_line: str
+    #: Whether the Parent Line is a section heading rather than a lead-in. See `Clause`.
+    parent_is_heading: bool = False
 
 
 def _leading_number(marker: str) -> str:
@@ -222,22 +224,28 @@ def _parent_text(marker: str, candidate: _Region | None) -> str:
     return candidate.first_line
 
 
-def _parent_lines(regions: list[_Region]) -> list[str]:
-    """The Parent Line of every region: the line it sits one level under, never a sibling.
+def _parent_lines(regions: list[_Region]) -> list[tuple[str, bool]]:
+    """The Parent Line of every region, and whether it is a heading: the line it sits one level
+    under, never a sibling.
+
+    A Parent Line is a heading when the region it came from has the shape of one (a single short
+    label after its marker, no colon), the same test `_is_heading_shape` makes for merging. A line
+    ending in a colon, or a longer one, is a lead-in.
 
     Walks the regions with a stack of the open items. Entering a region closes every open item at
     its depth or deeper, so what is left on top is the nearest shallower item, which is the line
     this one sits under. The unmarked opening has depth 0 and is never anyone's parent.
     """
-    parents: list[str] = []
+    parents: list[tuple[str, bool]] = []
     stack: list[_Region] = []
     for region in regions:
         if region.marker is None:
-            parents.append("")
+            parents.append(("", False))
             continue
         while stack and stack[-1].depth >= region.depth:
             stack.pop()
-        parents.append(_parent_text(region.marker, stack[-1] if stack else None))
+        text = _parent_text(region.marker, stack[-1] if stack else None)
+        parents.append((text, bool(text) and stack[-1].is_heading_shape))
         stack.append(region)
     return parents
 
@@ -258,15 +266,27 @@ def _merge_headings(regions: list[_Region]) -> list[_Piece]:
             continue
         first = pending_heading if pending_heading is not None else index
         pending_heading = None
+        line, is_heading = parents[first]
         pieces.append(
-            _Piece(start=regions[first].start, end=region.end, parent_line=parents[first])
+            _Piece(
+                start=regions[first].start,
+                end=region.end,
+                parent_line=line,
+                parent_is_heading=is_heading,
+            )
         )
 
     if pending_heading is not None:
         # A heading with nothing below it: the document ends on it. It keeps its own Clause.
         heading = regions[pending_heading]
+        line, is_heading = parents[pending_heading]
         pieces.append(
-            _Piece(start=heading.start, end=heading.end, parent_line=parents[pending_heading])
+            _Piece(
+                start=heading.start,
+                end=heading.end,
+                parent_line=line,
+                parent_is_heading=is_heading,
+            )
         )
     return pieces
 
@@ -366,7 +386,14 @@ def _split_pieces(text: str, pieces: list[_Piece], ceiling: int) -> list[_Piece]
     result: list[_Piece] = []
     for piece in pieces:
         for start, end in _split_oversized(text, piece.start, piece.end, ceiling):
-            result.append(_Piece(start=start, end=end, parent_line=piece.parent_line))
+            result.append(
+                _Piece(
+                    start=start,
+                    end=end,
+                    parent_line=piece.parent_line,
+                    parent_is_heading=piece.parent_is_heading,
+                )
+            )
     return result
 
 
@@ -389,6 +416,7 @@ def split_document(
             end=piece.end,
             text=text[piece.start : piece.end],
             parent_line=piece.parent_line,
+            parent_is_heading=piece.parent_is_heading,
         )
         for index, piece in enumerate(pieces)
     )

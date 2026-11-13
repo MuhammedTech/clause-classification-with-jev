@@ -90,6 +90,25 @@ _Avoid_: classifier, the model, LLM
 The probability Jev returns that a Clause's Detection Question is answered yes.
 _Avoid_: confidence, score, certainty
 
+**Question type**:
+The form Jev is asked a Detection Question in, one for every Rule: `binary` (Jev's yes/no type),
+`score2` (a two-level score, No then Yes) or `choice2` (a choice between yes and no). The same
+question as a different type gives different P(yes), so the type is part of the cache key. Ticket 08
+chose `binary`.
+_Avoid_: prompt style, mode, format
+
+**Heading context**:
+Whether Jev is shown a section heading as the Parent Line. A lead-in line such as "Licensee shall:" is
+always shown; only a heading is taken out when this is off. Ticket 08 left it on.
+_Avoid_: header, title context
+
+**Separation**:
+For one Rule, the chance that a Clause holding a Highlight scores a higher P(yes) than one that does
+not, drawn at random, with a tie counting half. 1.0 ranks every holding Clause above every other, 0.5
+is a coin. It needs no Cutoff and does not depend on the base rate, so ticket 08 can read it on a
+sample enriched with holding Clauses where Binned Share and Precision would not transfer.
+_Avoid_: AUC (in prose), accuracy, discrimination
+
 ### Cascade
 
 **Pair**:

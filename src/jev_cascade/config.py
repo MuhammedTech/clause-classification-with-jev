@@ -37,6 +37,27 @@ def cuad_is_available(directory: Path | None = None) -> bool:
 
 
 # --------------------------------------------------------------------------------------------------
+# How Jev is asked. Both settings are set from ticket 08's sample runs and printed in the report.
+# --------------------------------------------------------------------------------------------------
+
+#: The question type Jev is asked with, one for every Rule. It is part of the P(yes) cache key
+#: because the same question asked as a different type gives different probabilities. `binary` is
+#: Jev's yes/no type (sent as `noul`); `score2` and `choice2` are the other two ticket 08 compared.
+#: Set from ticket 08's sample on 2026-11-13 (`docs/question-type-and-heading-sample.md`): mean
+#: separation over the seven Rules was 0.980 for `binary`, 0.973 for `score2` and 0.973 for
+#: `choice2`, so neither beat `binary` by the 0.02 margin fixed in advance and `binary` stands.
+QUESTION_TYPE = "binary"
+
+#: Whether Jev is shown a section heading as the Parent Line. A lead-in line such as "Licensee
+#: shall:" is always shown; only a heading is taken out when this is off (ticket 08).
+#: Set from the same sample: taking the heading out changed mean separation by +0.000 (95%
+#: interval -0.002 to +0.002), well under the 0.02 it needed to come out, so it stays on. The sample
+#: is near its ceiling and holds only 40 near misses, so this is "no difference detectable", which
+#: is weaker than "no difference".
+HEADING_CONTEXT = True
+
+
+# --------------------------------------------------------------------------------------------------
 # Prices and cost assumptions. Every number the cost model uses lives here, with where it came from
 # and when, so correcting one is an edit to one place and the report can print its source.
 # --------------------------------------------------------------------------------------------------

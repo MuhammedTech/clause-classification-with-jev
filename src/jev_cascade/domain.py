@@ -6,7 +6,8 @@ exactly where a Highlight starts does not overlap it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Iterable
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,10 @@ class Clause:
     end: int
     text: str
     parent_line: str = ""
+    #: Whether `parent_line` is a section heading ("9. Limitation of Liability") rather than a
+    #: lead-in ("10.1 Licensee shall:"). Never shown to Jev; ticket 08 reads it to take the heading
+    #: out of Jev's context and leave a lead-in in.
+    parent_is_heading: bool = False
 
     def __post_init__(self) -> None:
         if self.end < self.start:
@@ -77,3 +82,14 @@ def holds(clause: Clause, highlight: Highlight) -> bool:
     if clause.doc_id != highlight.doc_id:
         return False
     return max(clause.start, highlight.start) < min(clause.end, highlight.end)
+
+
+def without_heading(clauses: Iterable[Clause]) -> list[Clause]:
+    """The Clauses as Jev is shown them when heading context is off.
+
+    A Parent Line that is a section heading is blanked; a lead-in ("Licensee shall:") stays,
+    because a list item read without its lead-in is a different and unfair question. The span and
+    text are untouched, so grading is identical in both arms, and the Parent Line is part of the
+    cache fingerprint, so the two arms never share an answer where they differ.
+    """
+    return [replace(c, parent_line="") if c.parent_is_heading else c for c in clauses]

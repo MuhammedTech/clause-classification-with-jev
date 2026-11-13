@@ -16,7 +16,7 @@ phrased Detection Question. No sub-questions.
 | R8 | Anti-Assignment | Does this clause restrict assigning or transferring the agreement? |
 
 Numbering keeps the gap at R4 so these ids stay comparable with the earlier notes. The wording above
-is drafted and needs the user's review before the real run.
+was **approved by the user on 2026-11-13** (ticket 08), as drafted, with no edits.
 
 Every question is positive, so a high P(yes) always means Jev thinks the Clause is relevant. Outside
 testing reports that a yes/no question whose true answer means "no" is answered worse.

@@ -30,8 +30,43 @@ from . import config
 #: The environment variable the key is read from. It is never read from the repo.
 API_KEY_ENV = "JEV_API_KEY"
 
-#: What the client sends for each question type the runner can ask. Ticket 08 adds the others.
-_QUESTION_TYPES = {"binary": "noul"}
+def _read_noul(answer: dict) -> float:
+    return float(answer["noul"])
+
+
+def _read_score_top(answer: dict) -> float:
+    return float(answer["probabilities"]["1"])
+
+
+def _read_choice_yes(answer: dict) -> float:
+    return float(answer["probabilities"]["yes"])
+
+
+@dataclass(frozen=True)
+class _QuestionType:
+    """How one question type is sent, and where P(yes) is read from in its answer."""
+
+    #: The fields beside `instructions` in the question object, if any.
+    extra: dict
+    #: The `type` field.
+    jev_type: str
+    read: Callable[[dict], float]
+
+
+#: What the client sends for each question type the runner can ask. The type's id is the cache
+#: key's only record of this wording, so **changing a `criteria` here means giving the type a new
+#: id**, or old answers would be served to the new question. The instruction is the Rule's approved
+#: Detection Question, word for word, in all three, so the type is the only thing that varies.
+#:
+#: - `binary`: Jev's yes/no type. P(yes) is its one number.
+#: - `score2`: a two-level score, `No` then `Yes`. P(yes) is the probability of level 1.
+#: - `choice2`: a choice between `yes` and `no`, with no option descriptions. P(yes) is the
+#:   probability of `yes`.
+_QUESTION_TYPES = {
+    "binary": _QuestionType({}, "noul", _read_noul),
+    "score2": _QuestionType({"criteria": ["No", "Yes"]}, "score", _read_score_top),
+    "choice2": _QuestionType({"criteria": {"yes": None, "no": None}}, "choice", _read_choice_yes),
+}
 
 #: The id the one question goes under in the request, and is read back from in the reply.
 _QUESTION_ID = "q"
@@ -125,7 +160,7 @@ class TypeSafeJevClient:
         question_type: str,
     ) -> float:
         try:
-            jev_type = _QUESTION_TYPES[question_type]
+            spec = _QUESTION_TYPES[question_type]
         except KeyError:
             raise ValueError(
                 f"question type {question_type!r} is not supported by the real client yet; "
@@ -137,7 +172,13 @@ class TypeSafeJevClient:
             {
                 "model": self.model,
                 "state": state,
-                "questions": {_QUESTION_ID: {"type": jev_type, "instructions": question}},
+                "questions": {
+                    _QUESTION_ID: {
+                        "type": spec.jev_type,
+                        "instructions": question,
+                        **spec.extra,
+                    }
+                },
             },
             ensure_ascii=False,
         ).encode("utf-8")
@@ -152,7 +193,7 @@ class TypeSafeJevClient:
                 f"asked {self.model!r} but the reply came from {reply.get('model')!r}"
             )
         try:
-            return float(reply["answers"][_QUESTION_ID]["noul"])
+            return spec.read(reply["answers"][_QUESTION_ID])
         except (KeyError, TypeError, ValueError) as error:
             raise JevError(f"unexpected reply shape from Jev: {str(reply)[:200]}") from error
 

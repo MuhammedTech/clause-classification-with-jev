@@ -9,6 +9,7 @@ dependencies = [
 
 [project.scripts]
 jev-cascade = "jev_cascade.cli:main"
+jev-cascade-sample = "jev_cascade.sample_cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]

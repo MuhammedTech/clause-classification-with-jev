@@ -301,3 +301,45 @@ def fully_binned(
         total_words=sum(c.word_count for c in clauses),
         fully_binned_words=words,
     )
+
+
+@dataclass(frozen=True)
+class Separation:
+    """How well one Rule's P(yes) ranks Clauses that hold a Highlight above those that do not.
+
+    `value` is the chance that a held Clause scores higher than a not-held one, drawn at random,
+    with a tie counting half: 1.0 ranks every held Clause above every not-held one, 0.5 is no better
+    than a coin. It needs no Cutoff, and it does not depend on the base rate, which is why ticket 08
+    can use it on a sample enriched with held Clauses where Binned Share and Precision would not
+    transfer. It is the area under the ROC curve.
+    """
+
+    held: int
+    not_held: int
+    value: float
+
+
+def separation(
+    clauses: Sequence[Clause],
+    highlights: Iterable[Highlight],
+    p_yes: Mapping[ClauseKey, float],
+) -> Separation | None:
+    """Separation of one Rule over `clauses`, or `None` when either group is empty.
+
+    A Clause is held when it holds at least one of `highlights`, as everywhere else.
+    """
+    highlights = list(highlights)
+    held: list[float] = []
+    not_held: list[float] = []
+    for clause in clauses:
+        group = held if any(holds(clause, h) for h in highlights) else not_held
+        group.append(p_yes[clause.key])
+    if not held or not not_held:
+        return None
+    # Counted in integers (a win is 2, a tie 1) so ties never cost a float rounding error.
+    points = sum(2 if h > n else 1 if h == n else 0 for h in held for n in not_held)
+    return Separation(
+        held=len(held),
+        not_held=len(not_held),
+        value=points / (2 * len(held) * len(not_held)),
+    )

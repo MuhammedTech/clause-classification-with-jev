@@ -17,7 +17,7 @@ from . import config
 from .charts import write_curve_chart, write_curve_csv
 from .corpus import corpus_facts, load_corpus
 from .cost import CostReport, build_cost_report
-from .domain import Clause, Highlight
+from .domain import Clause, Highlight, without_heading
 from .evaluator import (
     ClauseKey,
     FullyBinned,
@@ -98,6 +98,8 @@ def run(
     out_dir: Path | None = None,
     cuad_directory: Path | None = None,
     workers: int = 1,
+    question_type: str = config.QUESTION_TYPE,
+    heading_context: bool = config.HEADING_CONTEXT,
 ) -> RunResult:
     """Take the documents through every stage and write the report."""
     client = client if client is not None else StubJevClient()
@@ -127,8 +129,13 @@ def run(
             )
         )
 
+    if not heading_context:
+        clauses = without_heading(clauses)
+
     cache_path = out_dir / "pyes.jsonl"
-    table, stats = run_pairs(clauses, rules, client, cache_path, workers=workers)
+    table, stats = run_pairs(
+        clauses, rules, client, cache_path, workers=workers, question_type=question_type
+    )
 
     metrics = tuple(
         evaluate_rule(
@@ -184,6 +191,8 @@ def run(
             stats=stats,
             cutoff=cutoff,
             model_version=client.model_version,
+            question_type=question_type,
+            heading_context=heading_context,
             documents=doc_rows,
             is_stub=client.is_stub,
             # Corpus-wide and counted from CUAD, so it does not depend on which documents or

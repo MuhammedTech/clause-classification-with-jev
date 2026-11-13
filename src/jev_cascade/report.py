@@ -22,7 +22,6 @@ from .evaluator import FreeSaving, FullyBinned, RuleMetrics
 from .partition import PartitionFacts
 from .rulebook import (
     DROPPED_REASONS,
-    QUESTION_TYPE,
     REPLACED_RULES,
     RULEBOOK,
     SUPERSEDED_GATE_COUNTS,
@@ -69,6 +68,8 @@ class ReportInputs:
     is_stub: bool
     corpus: CorpusFacts
     partition: PartitionFacts
+    question_type: str = config.QUESTION_TYPE
+    heading_context: bool = config.HEADING_CONTEXT
 
 
 def _format_share(value: float | None) -> str:
@@ -523,6 +524,28 @@ def _how_measured_section() -> list[str]:
     ]
 
 
+def _how_asked_section(inputs: ReportInputs) -> list[str]:
+    """What Jev was shown and asked, and the one leak in how that was settled."""
+    heading = (
+        "A section heading is shown to Jev as the Parent Line when a Clause sits under one."
+        if inputs.heading_context
+        else "A section heading is **not** shown to Jev; a lead-in line such as 'Licensee "
+        "shall:' still is."
+    )
+    return [
+        "## How Jev is asked",
+        "",
+        f"- **Question type: {inputs.question_type}**, one type for every Rule, with each Rule's "
+        "Detection Question as approved in ticket 08, word for word.",
+        f"- **Heading context: {'on' if inputs.heading_context else 'off'}.** {heading}",
+        "- **Both choices were made on a sample of Pairs that the full run later scored.** Picking "
+        "a setting on data and then reporting on the same data is a selection leak. It is small: "
+        "two settings, chosen on separation alone, from a sample that is a few percent of the "
+        "corpus. But the figures below are not a fully held-out test of those two choices.",
+        "",
+    ]
+
+
 def _curve_excerpt(rows: Sequence[RuleMetrics]) -> list[RuleMetrics]:
     """Every row if the curve is short, else evenly spaced by position, first and last included.
 
@@ -704,10 +727,12 @@ def render(inputs: ReportInputs) -> str:
     lines.append(f"| Jev calls made | {inputs.stats.calls_made} |")
     lines.append(f"| Answers served from cache | {inputs.stats.cache_hits} |")
     lines.append(f"| Wall clock | {inputs.stats.seconds:.2f}s |")
-    lines.append(f"| Question type | {QUESTION_TYPE} |")
+    lines.append(f"| Question type | {inputs.question_type} |")
+    lines.append(f"| Heading context | {'on' if inputs.heading_context else 'off'} |")
     lines.append(f"| Model version | {inputs.model_version} |")
     lines.append("")
 
+    lines.extend(_how_asked_section(inputs))
     lines.extend(_how_measured_section())
     lines.extend(_corpus_section(inputs.corpus))
     lines.extend(_rulebook_section(inputs.corpus))

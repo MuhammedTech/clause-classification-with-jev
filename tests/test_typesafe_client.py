@@ -287,3 +287,92 @@ def test_calls_are_spaced_to_stay_under_the_request_limit():
     # 1,200 a minute is one every 50 ms, so five calls take at least four gaps.
     assert clock.now >= 4 * 0.05 - 1e-9
     assert len(transport.requests) == 5
+
+
+# --- ticket 08: the other two question types -------------------------------------------------------
+#
+# Reply shapes are the ones in TypeSafe's Score and Choice docs (docs.typesafe.ai/primitives/score.md
+# and choice.md, read 2026-11-13).
+
+
+def score_reply(p_no, p_yes):
+    return 200, {
+        "model": MODEL,
+        "answers": {
+            "q": {
+                "type": "score",
+                "score": p_yes,
+                "confidence": 0.5,
+                "legend": {"0": "No", "1": "Yes"},
+                "probabilities": {"0": p_no, "1": p_yes},
+            }
+        },
+        "usage": {"input_tokens": 10, "output_tokens": 1},
+    }
+
+
+def choice_reply(p_yes, p_no):
+    return 200, {
+        "model": MODEL,
+        "answers": {
+            "q": {
+                "type": "choice",
+                "choice": "yes" if p_yes >= p_no else "no",
+                "confidence": 0.5,
+                "probabilities": {"no": p_no, "yes": p_yes},
+            }
+        },
+        "usage": {"input_tokens": 10, "output_tokens": 1},
+    }
+
+
+QUESTION = "Does this clause cap or limit a party's liability?"
+
+
+def test_a_two_level_score_asks_the_same_question_and_reads_the_probability_of_the_top_level():
+    transport = FakeTransport(score_reply(0.3, 0.7))
+
+    p = ask(client(transport), question_type="score2")
+
+    assert p == 0.7
+    ((_, _, body),) = transport.requests
+    assert body["questions"]["q"] == {
+        "type": "score",
+        "instructions": QUESTION,
+        "criteria": ["No", "Yes"],
+    }
+
+
+def test_a_yes_no_choice_asks_the_same_question_and_reads_the_probability_of_yes():
+    transport = FakeTransport(choice_reply(0.9, 0.1))
+
+    p = ask(client(transport), question_type="choice2")
+
+    assert p == 0.9
+    ((_, _, body),) = transport.requests
+    assert body["questions"]["q"] == {
+        "type": "choice",
+        "instructions": QUESTION,
+        "criteria": {"yes": None, "no": None},
+    }
+
+
+def test_the_state_is_identical_for_all_three_types():
+    states = []
+    for question_type, reply in (
+        ("binary", ok(0.5)),
+        ("score2", score_reply(0.5, 0.5)),
+        ("choice2", choice_reply(0.5, 0.5)),
+    ):
+        transport = FakeTransport(reply)
+        ask(client(transport), question_type=question_type)
+        states.append(transport.requests[0][2]["state"])
+    assert len(set(states)) == 1
+
+
+def test_a_reply_missing_the_probability_is_an_error_not_a_zero():
+    from jev_cascade.typesafe import JevError
+
+    bad = 200, {"model": MODEL, "answers": {"q": {"type": "choice", "probabilities": {"no": 1.0}}}}
+    with pytest.raises(JevError):
+        ask(client(FakeTransport(bad)), question_type="choice2")

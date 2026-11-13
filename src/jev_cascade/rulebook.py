@@ -14,17 +14,12 @@ R5 and R8 changed meaning from the original notes — Exclusivity replaced Non-C
 Anti-Assignment replaced Volume Restriction — so their results must not be compared to the old
 rules. Ticket 05 puts that statement in the report; ticket 01's report covers one Rule only.
 
-The wording below is drafted and awaits the user's review in ticket 08.
+The wording below was approved by the user on 2026-11-13 (ticket 08), exactly as ADR-0005 drafted it.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-#: The question type Jev is asked with. It is part of the P(yes) cache key because the same
-#: question asked as a different type gives very different probabilities.
-QUESTION_TYPE = "binary"
-
 
 @dataclass(frozen=True)
 class Rule:

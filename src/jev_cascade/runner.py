@@ -33,9 +33,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from . import config
 from .domain import Clause
 from .jev import JevClient
-from .rulebook import QUESTION_TYPE, Rule
+from .rulebook import Rule
 
 #: A cached answer is identified by document, Clause span, Rule, question type, model version and
 #: the fingerprint of what Jev was shown. See the module docstring.
@@ -65,13 +66,13 @@ def prompt_fingerprint(parent_line: str, clause_text: str) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
-def _key(clause: Clause, rule: Rule, model_version: str) -> PairKey:
+def _key(clause: Clause, rule: Rule, model_version: str, question_type: str) -> PairKey:
     return (
         clause.doc_id,
         clause.start,
         clause.end,
         rule.id,
-        QUESTION_TYPE,
+        question_type,
         model_version,
         prompt_fingerprint(clause.parent_line, clause.text),
     )
@@ -128,7 +129,7 @@ def _close_dangling_line(path: Path) -> None:
         handle.write("\n")
 
 
-def _row(clause: Clause, rule: Rule, model_version: str, p_yes: float) -> str:
+def _row(clause: Clause, rule: Rule, model_version: str, question_type: str, p_yes: float) -> str:
     return (
         json.dumps(
             {
@@ -136,7 +137,7 @@ def _row(clause: Clause, rule: Rule, model_version: str, p_yes: float) -> str:
                 "clause_start": clause.start,
                 "clause_end": clause.end,
                 "rule_id": rule.id,
-                "question_type": QUESTION_TYPE,
+                "question_type": question_type,
                 "model_version": model_version,
                 "prompt_fingerprint": prompt_fingerprint(clause.parent_line, clause.text),
                 "question": rule.detection_question,
@@ -154,6 +155,7 @@ def run_pairs(
     client: JevClient,
     cache_path: Path,
     workers: int = 1,
+    question_type: str = config.QUESTION_TYPE,
 ) -> tuple[PYesTable, RunStats]:
     """Ask Jev about every (Clause, Rule) Pair, skipping any already in the cache.
 
@@ -188,7 +190,7 @@ def run_pairs(
     cache_hits = 0
     for clause in clauses:
         for rule in rules:
-            key = _key(clause, rule, model_version)
+            key = _key(clause, rule, model_version, question_type)
             needed.append((rule.id, clause.key, key))
             if key in cached or key in to_ask:
                 cache_hits += 1
@@ -218,7 +220,7 @@ def run_pairs(
             # Written before it leaves `in_flight`, so an error while writing cannot also make the
             # drain forget the call. Flushed per answer so an interruption loses at most the calls
             # still in flight.
-            handle.write(_row(clause, rule, model_version, p_yes))
+            handle.write(_row(clause, rule, model_version, question_type, p_yes))
             handle.flush()
             del in_flight[future]
 
@@ -235,7 +237,7 @@ def run_pairs(
                         clause_text=clause.text,
                         parent_line=clause.parent_line,
                         question=rule.detection_question,
-                        question_type=QUESTION_TYPE,
+                        question_type=question_type,
                     )
                     in_flight[future] = (key, clause, rule)
                 if not in_flight:

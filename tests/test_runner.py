@@ -11,7 +11,8 @@ from jev_cascade.jev import (
     JevCallLimitReached,
     StubJevClient,
 )
-from jev_cascade.rulebook import QUESTION_TYPE, rule
+from jev_cascade.config import QUESTION_TYPE
+from jev_cascade.rulebook import rule
 from jev_cascade.runner import read_cache, run_pairs
 
 R1 = rule("R1")
@@ -235,3 +236,27 @@ def test_jev_receives_the_parent_line_and_the_clause_text(tmp_path):
     client = RecordingClient()
     run_pairs([clause], [R1], client, tmp_path / "pyes.jsonl")
     assert client.seen == [("2. Licensee commits to:", "(b) report quarterly")]
+
+
+def test_the_question_type_is_asked_cached_and_keyed_per_run(tmp_path):
+    cache = tmp_path / "pyes.jsonl"
+    seen = []
+
+    class Recording(StubJevClient):
+        def p_yes(self, clause_text, parent_line, question, question_type):
+            seen.append(question_type)
+            return super().p_yes(clause_text, parent_line, question, question_type)
+
+    run_pairs(clauses(), [R1], Recording(), cache, question_type="score2")
+
+    assert seen == ["score2"] * 3
+    types = {json.loads(line)["question_type"] for line in cache.read_text().splitlines()}
+    assert types == {"score2"}
+
+    # An answer cached under one type is not served to another: it is a different question.
+    other = CountingJevClient(StubJevClient())
+    run_pairs(clauses(), [R1], other, cache, question_type="choice2")
+    assert other.calls == 3
+    again = CountingJevClient(StubJevClient())
+    run_pairs(clauses(), [R1], again, cache, question_type="score2")
+    assert again.calls == 0

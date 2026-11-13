@@ -96,3 +96,22 @@ its use of "lead-in", which the glossary has since renamed Parent Line.
   this ADR's own examples, carry no item marker and are not treated as headings. That line stays at
   the tail of the Clause above it. This was not built, because the ticket asks for no cleverer marker
   detection, and the per-document table in the report's Partition section is where it would show.
+
+## Amendment, 2026-11-13: what ticket 08 settled about the heading
+
+The open question above, whether a heading helps or hurts Jev, was tested on a sample
+(`docs/question-type-and-heading-sample.md`): 20 held and 40 not-held Clauses per Rule, half the
+not-held ones under the same heading as a held Clause, asked with the heading shown and taken out.
+Mean separation was 0.980 both ways (difference +0.000, 95% interval -0.002 to +0.002), so the
+heading **stays on**.
+
+- **"Heading" means a section heading, not every Parent Line.** The Splitter now records whether a
+  Parent Line is a heading (a single short label after its marker, no colon), and taking the heading
+  out leaves a lead-in such as `10.1 Licensee shall:` in place. Blanking every Parent Line would have
+  tested something else, and a list item read without its lead-in is a different question.
+- **The sample could not discriminate.** Every Rule scored at least 0.938 in every arm, and the sample
+  holds only 40 near misses in all. "No difference" means none was detectable here. The harm the ADR
+  worried about, a section label stamped on unrelated Clauses, would show over the corpus's many
+  unrelated Clauses, which separation on a held-enriched sample does not measure.
+- The choice was made on Pairs the full run later scores, a small selection leak the final report
+  discloses.

@@ -82,6 +82,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _print_retries(client) -> None:
+    """Say how many calls were retried and why, if the client keeps count.
+
+    A 429 here would mean the request limit is lower than the 1,200 a minute assumed, and the count
+    matters most when a run could not finish, so it is printed on the failure path too.
+    """
+    retries = getattr(getattr(client, "inner", client), "retries", None)
+    if retries:
+        causes = ", ".join(f"{count} x {cause}" for cause, count in sorted(retries.items()))
+        print(f"Retries: {causes}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -116,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
             "Run once without --from-cache to fill it."
         )
     except JevError as error:
+        _print_retries(client)
         parser.error(
             f"Jev failed: {error}. Answers already received are in the cache, so running the "
             "same command again resumes."
@@ -126,10 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         f"{result.stats.pairs} Pairs: {result.stats.calls_made} Jev calls, "
         f"{result.stats.cache_hits} from cache, {result.stats.seconds:.2f}s"
     )
-    retries = getattr(getattr(client, "inner", client), "retries", None)
-    if retries:
-        # A 429 here would mean the request limit is lower than the 1,200 a minute assumed.
-        print("Retries: " + ", ".join(f"{count} x {cause}" for cause, count in sorted(retries.items())))
+    _print_retries(client)
     return 0
 
 

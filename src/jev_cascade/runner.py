@@ -167,7 +167,7 @@ def run_pairs(
 
     The window is bounded: at most `workers` calls are outstanding, and a new one is submitted only
     when another returns. So a failure (or Ctrl-C) never leaves the rest of the corpus queued behind
-    it, and the calls already in flight are waited for and **kept**, because they were paid for.
+    it, and the calls already in flight are waited for and written to the cache, because they were paid for.
     The first failure is re-raised once they have landed. Because answers are flushed as they
     arrive, the next run asks only what is still missing.
     """
@@ -206,17 +206,21 @@ def run_pairs(
         def settle(future: Future) -> None:
             """Record one finished call: keep its answer, or remember the first failure."""
             nonlocal calls_made, first_error
-            key, clause, rule = in_flight.pop(future)
+            key, clause, rule = in_flight[future]
             try:
                 p_yes = future.result()
             except BaseException as error:  # noqa: BLE001 - re-raised below, after the drain
                 first_error = first_error or error
+                del in_flight[future]
                 return
-            handle.write(_row(clause, rule, model_version, p_yes))
-            # Flushed per answer so an interruption loses at most the calls still in flight.
-            handle.flush()
             cached[key] = p_yes
             calls_made += 1
+            # Written before it leaves `in_flight`, so an error while writing cannot also make the
+            # drain forget the call. Flushed per answer so an interruption loses at most the calls
+            # still in flight.
+            handle.write(_row(clause, rule, model_version, p_yes))
+            handle.flush()
+            del in_flight[future]
 
         pool = ThreadPoolExecutor(max_workers=workers)
         try:

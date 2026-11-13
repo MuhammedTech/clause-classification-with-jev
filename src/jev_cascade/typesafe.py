@@ -171,9 +171,11 @@ class TypeSafeJevClient:
         if start > now:
             self.sleep(start - now)
 
-    def _count_retry(self, cause: str) -> None:
-        with self._lock:
-            self.retries[cause] += 1
+    def _count_retry(self, cause: str, attempt: int) -> None:
+        """Count a failure as a retry only if another attempt follows it."""
+        if attempt + 1 < self.max_attempts:
+            with self._lock:
+                self.retries[cause] += 1
 
     def _post(self, body: bytes, headers: dict) -> dict:
         """One request, retried on transient failures; anything else raises at once."""
@@ -187,7 +189,7 @@ class TypeSafeJevClient:
             except (OSError, http.client.HTTPException) as error:
                 # Timeouts, dropped connections and a body cut off mid-read.
                 last = f"connection failed: {error!r}"
-                self._count_retry("connection")
+                self._count_retry("connection", attempt)
                 continue
 
             if status == 200:
@@ -195,12 +197,12 @@ class TypeSafeJevClient:
                     return json.loads(payload)
                 except ValueError:  # a cut-off body: JSON or UTF-8 decoding failed
                     last = "HTTP 200 with a body that is not JSON"
-                    self._count_retry("bad body")
+                    self._count_retry("bad body", attempt)
                     continue
             text = payload.decode("utf-8", errors="replace")[:200]
             if status in _RETRYABLE_STATUSES or status >= 500:
                 last = f"HTTP {status}"
-                self._count_retry(str(status))
+                self._count_retry(str(status), attempt)
                 continue
             if status == 401:
                 raise JevAuthError(f"Jev rejected the key (HTTP 401): {text}")

@@ -4,6 +4,8 @@ transport and the clock replaced by a fake clock. No test here reaches TypeSafe.
 from __future__ import annotations
 
 import json
+import threading
+import time
 
 import pytest
 
@@ -170,10 +172,13 @@ def test_a_truncated_reply_is_retried():
 
 def test_it_gives_up_after_the_retry_budget_and_says_so():
     transport = FakeTransport((429, {}))
+    c = client(transport, max_attempts=3)
 
     with pytest.raises(JevUnavailable):
-        ask(client(transport, max_attempts=3))
+        ask(c)
     assert len(transport.requests) == 3
+    # Three attempts is two retries: the last failure is given up on, not retried.
+    assert c.retries == {"429": 2}
 
 
 def test_a_rejected_key_is_not_retried_and_the_key_is_not_in_the_message():
@@ -202,8 +207,6 @@ def test_a_too_long_clause_is_reported_as_too_long_not_retried():
 
 
 def test_threads_share_one_request_budget():
-    import threading
-
     class RecordingClock:
         """Time stands still and sleeps are only recorded, so the waits show the reserved slots."""
 
@@ -214,14 +217,10 @@ def test_threads_share_one_request_budget():
         def time(self):
             # Yield here, between a thread reading the budget and claiming a slot, which is
             # exactly where an unlocked pacer lets two threads take the same one.
-            import time
-
             time.sleep(0.005)
             return 0.0
 
         def sleep(self, seconds):
-            import time
-
             time.sleep(0.005)  # a real sleep yields, as the real one does
             with self._lock:
                 self.sleeps.append(seconds)

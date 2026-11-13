@@ -12,6 +12,7 @@ import threading
 
 import pytest
 
+from jev_cascade import runner
 from jev_cascade.domain import Clause
 from jev_cascade.jev import StubJevClient
 from jev_cascade.rulebook import rule
@@ -117,6 +118,37 @@ def test_a_failure_keeps_every_answer_that_returned_and_stops_asking(tmp_path):
     resumed = ThreadSafeCounting(StubJevClient())
     table, _ = run_pairs(clauses, [R1], resumed, cache, workers=4)
     assert resumed.calls == 200 - (client.calls - 1)
+    assert len(table["R1"]) == 200
+
+
+def test_ctrl_c_in_the_runner_keeps_what_was_paid_for_and_resumes(tmp_path, monkeypatch):
+    cache = tmp_path / "pyes.jsonl"
+    clauses = many_clauses(200)
+
+    real_wait = runner.wait
+    waits = {"n": 0}
+
+    def interrupted_on_the_third_wait(futures, **kwargs):
+        waits["n"] += 1
+        if waits["n"] == 3:
+            raise KeyboardInterrupt  # the user pressed Ctrl-C in the main thread
+        return real_wait(futures, **kwargs)
+
+    monkeypatch.setattr(runner, "wait", interrupted_on_the_third_wait)
+    client = ThreadSafeCounting(StubJevClient())
+
+    with pytest.raises(KeyboardInterrupt):
+        run_pairs(clauses, [R1], client, cache, workers=4)
+    monkeypatch.undo()
+
+    # Calls in flight when it hit were waited for and written: nothing paid for is lost, and it did
+    # not carry on asking.
+    assert len(read_cache(cache)) == client.calls
+    assert client.calls < 20
+
+    resumed = ThreadSafeCounting(StubJevClient())
+    table, _ = run_pairs(clauses, [R1], resumed, cache, workers=4)
+    assert resumed.calls == 200 - client.calls
     assert len(table["R1"]) == 200
 
 

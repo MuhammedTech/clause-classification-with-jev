@@ -52,5 +52,25 @@ reproducible from its cache, but a re-run from scratch will not reproduce the re
 digit. Worth one sentence in the final report. It matters most to the free saving, which is the
 lowest P(yes) among held Clauses, and to a Cutoff placed within about 0.04 of a Clause's P(yes).
 
-**Code review.** See the commit that follows. Left alone on purpose: `FailingJevClient.calls` is not
-thread-safe, but it is only used with one worker.
+**Code review (Standards and Spec).** No hard violations on either axis; the core of `run_pairs`
+held up (no double write, no hang, no `KeyError`, one writer). Fixed: a test for a real main-thread
+Ctrl-C (it passed, so the drain does what the ticket says); `settle` now writes an answer before it
+leaves the in-flight set, so a write error cannot make the drain forget a paid-for call; a call is
+counted as a retry only when another attempt follows it (six 429s are five retries); the command
+prints the retry count when a run dies of rate limiting, which is when it matters most; the docstring
+no longer says "kept", a retired glossary term; function-local imports in the tests moved to the top.
+
+Left alone, as judgement calls:
+
+- `run_pairs` is about 110 lines and `settle` is a closure over five outer names with `nonlocal`.
+  Splitting the planning from the scheduler is real but is a refactor of working code; it belongs to
+  a later tidy, not this ticket.
+- **No shared backoff.** After a 429 each of the 32 threads retries on its own clock. Nothing here
+  hit a 429, so there is nothing to tune against; if ticket 09's run does, the fix is a shared
+  "cool down until" in the client, and the retry budget (six attempts, about 31s) may need raising.
+- `workers=1` runs the call on a pool thread, so Ctrl-C waits for that one call. Output is the same.
+- A Pair appearing twice counts the second as a cache hit. The run has no duplicates today.
+- `wait` in the drain has no timeout; the real client's own 60s timeout bounds it. A custom client
+  with no timeout could block it.
+- `getattr(getattr(client, "inner", client), "retries", None)` unwraps one wrapper level, which is as
+  many as the command ever stacks.

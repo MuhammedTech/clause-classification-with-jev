@@ -229,3 +229,28 @@ def test_running_the_command_twice_reports_zero_jev_calls(tmp_path, capsys):
 
     assert main(["--out", str(tmp_path)]) == 0
     assert "Pairs: 0 Jev calls" in capsys.readouterr().out
+
+
+def test_a_run_that_dies_of_rate_limiting_still_prints_the_retries(tmp_path, capsys, monkeypatch):
+    import json
+
+    from jev_cascade import cli
+    from jev_cascade.typesafe import TypeSafeJevClient
+
+    def always_rate_limited(url, headers, body, timeout):
+        return 429, json.dumps({}).encode()
+
+    monkeypatch.setattr(
+        cli,
+        "build_client",
+        lambda *args, **kwargs: TypeSafeJevClient(
+            api_key="k", transport=always_rate_limited, sleep=lambda s: None, max_attempts=3
+        ),
+    )
+
+    with pytest.raises(SystemExit):
+        main(["--jev", "real", "--workers", "1", "--rule", "R1", "--out", str(tmp_path)])
+
+    output = capsys.readouterr()
+    # The count matters most exactly when the run could not finish.
+    assert "Retries: 2 x 429" in output.out + output.err

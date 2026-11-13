@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Architecture review for clause-classification-with-jev</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+</script>
+<style>
+  .seam { border-style: dashed; }
+  .deep { background: linear-gradient(135deg, #0f172a, #1e293b); color: #f8fafc; }
+  .mod { border: 1.5px solid #475569; background: #fff; }
+  .leak { color: #dc2626; }
+  .lbl { font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+</style>
+</head>
+<body class="bg-stone-50 text-slate-900 font-sans">
+<main class="max-w-5xl mx-auto px-6 py-12 space-y-12">
+
+<header>
+  <h1 class="font-serif text-3xl">Architecture review: clause-classification-with-jev</h1>
+  <p class="text-sm text-slate-500 mt-1">2026-11-13 · 19 modules, ~5.3k lines in <span class="mono">src/jev_cascade</span> · hot spots: runner, cli, report (late ticket 09 work)</p>
+  <div class="flex flex-wrap gap-4 mt-4 text-xs items-center">
+    <span class="flex items-center gap-2"><span class="inline-block w-6 h-4 mod"></span>module</span>
+    <span class="flex items-center gap-2"><span class="inline-block w-6 h-4 border-2 border-dashed border-slate-500"></span>seam</span>
+    <span class="flex items-center gap-2"><span class="leak font-bold">&rarr;</span>leakage</span>
+    <span class="flex items-center gap-2"><span class="inline-block w-6 h-4 deep rounded-sm"></span>deep module</span>
+  </div>
+</header>
+
+<section id="candidates" class="space-y-10">
+
+<!-- 1 -->
+<article id="c1" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+  <div class="flex flex-wrap items-center gap-2">
+    <h2 class="font-serif text-2xl mr-2">1. Deepen the answer cache: one owner for "what Jev was shown"</h2>
+    <span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span>
+    <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">local-substitutable</span>
+  </div>
+  <ul class="mono text-sm text-slate-600">
+    <li>runner.py: PairKey:43, _key:115, _call_id:127, read_cache_with_stamps:141, _row:199, _billed_tokens:228, run_pairs:238-386</li>
+    <li>typesafe.py:194 · jev.py:113 · cost.py:101</li>
+  </ul>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div>
+      <div class="lbl text-slate-500 mb-2">Before: four modules each define the shown text</div>
+      <div class="rounded-lg border border-slate-200 p-4 space-y-2">
+        <div class="mod rounded p-2 lbl">runner.py &mdash; PairKey 7-tuple, <span class="leak">key[0],key[1],key[2],key[6]</span></div>
+        <div class="mod rounded p-2 lbl">typesafe.py &mdash; <span class="leak">parent_line + clause_text</span> joined here</div>
+        <div class="mod rounded p-2 lbl">jev.py &mdash; stub hash payload, <span class="leak">its own copy</span></div>
+        <div class="mod rounded p-2 lbl">cost.py &mdash; counts Parent Line + Clause tokens <span class="leak">again</span></div>
+        <div class="text-xs text-slate-500 pt-1">Calls rebuilt from rows by matching <span class="mono">asked_at</span> stamps. Wording and call shape are not in the key.</div>
+      </div>
+    </div>
+    <div>
+      <div class="lbl text-slate-500 mb-2">After: one module behind one seam</div>
+      <div class="rounded-lg border border-slate-200 p-4 space-y-2">
+        <div class="mod rounded p-2 lbl text-center">run_pairs &mdash; scheduling only</div>
+        <div class="text-center text-slate-400">&darr;</div>
+        <div class="deep rounded-lg p-4 text-sm space-y-1">
+          <div class="lbl text-slate-300">Answer cache</div>
+          <div>key · row format · read/write</div>
+          <div>per-call grouping · timing · billed usage</div>
+          <div>shown text, wording, call shape defined once</div>
+        </div>
+        <div class="text-center text-slate-400">&darr;</div>
+        <div class="mod seam rounded p-2 lbl text-center">JSONL file on tmp_path</div>
+      </div>
+    </div>
+  </div>
+  <p><b>Problem:</b> The ticket-10 bug class can recur: change one module's text format and the cache key does not move.</p>
+  <p><b>Solution:</b> Move the key, row format and per-call usage into one cache module; derive both the request and the key from one definition.</p>
+  <ul class="list-disc ml-6 text-sm">
+    <li>locality: ticket-10 bugs concentrate in one module</li>
+    <li>PairKey magic indexes disappear</li>
+    <li>A test can assert the key covers everything sent</li>
+    <li>run_pairs shrinks to scheduling</li>
+  </ul>
+</article>
+
+<!-- 2 -->
+<article id="c2" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+  <div class="flex flex-wrap items-center gap-2">
+    <h2 class="font-serif text-2xl mr-2">2. Give JevClient one head: ask several questions, get answers plus usage</h2>
+    <span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span>
+    <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">ports &amp; adapters</span>
+  </div>
+  <ul class="mono text-sm text-slate-600">
+    <li>jev.py: JevClient:21-42, ask_many:57-75, FanOutAnswers:45, wrappers:141-264</li>
+    <li>typesafe.py:160-171 · cli.py:95-117 · runner.py:326</li>
+  </ul>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div>
+      <div class="lbl text-slate-500 mb-2">Before: the Protocol says p_yes, the runner uses p_yes_many</div>
+      <div class="rounded-lg border border-slate-200 bg-white p-4">
+        <pre class="mermaid">
+flowchart TB
+  R[run_pairs] --> AM[ask_many]
+  AM -. getattr p_yes_many .-> C1[TypeSafe / stub / wrappers]
+  AM -. fallback .-> P[p_yes x N]
+  R -. getattr input_tokens .-> FA[FanOutAnswers dict subclass]
+  CLI[cli.py] -. getattr inner retries .-> C1
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class AM,FA,CLI leak
+        </pre>
+      </div>
+    </div>
+    <div>
+      <div class="lbl text-slate-500 mb-2">After: one interface, usage is part of it</div>
+      <div class="rounded-lg border border-slate-200 p-4 space-y-2">
+        <div class="mod rounded p-2 lbl text-center">run_pairs</div>
+        <div class="text-center text-slate-400">&darr;</div>
+        <div class="mod seam rounded p-3 lbl text-center">seam: ask one Clause several questions &rarr; answers + usage</div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="deep rounded p-2 text-sm text-center">TypeSafe adapter<br><span class="text-xs text-slate-300">retry, pacing, usage inside</span></div>
+          <div class="mod rounded p-2 text-sm text-center">Stub adapter</div>
+        </div>
+        <div class="text-xs text-slate-500">Counting / failing / cache-only: one test double or hook, not three copies.</div>
+      </div>
+    </div>
+  </div>
+  <p><b>Problem:</b> Fakes in the tests still implement the pre-fan-out <span class="mono">p_yes</span>, and every wrapper writes both shapes.</p>
+  <p><b>Solution:</b> Drop the single-question path; make retries and token usage part of the one interface instead of attributes found with <span class="mono">getattr</span>.</p>
+  <ul class="list-disc ml-6 text-sm">
+    <li>Two real adapters justify the seam</li>
+    <li>interface shrinks; wrappers collapse</li>
+    <li>CLI stops unwrapping .inner</li>
+    <li>Test fakes lose dual method sets</li>
+  </ul>
+</article>
+
+<!-- 3 -->
+<article id="c3" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+  <div class="flex flex-wrap items-center gap-2">
+    <h2 class="font-serif text-2xl mr-2">3. Build the scored corpus once, hand it to everyone</h2>
+    <span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">Worth exploring</span>
+    <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">in-process</span>
+  </div>
+  <ul class="mono text-sm text-slate-600">
+    <li>pipeline.py:116-138, 173-178, 205-208 · sample_cli.py:58-61, 107-120 · partition.py:133</li>
+  </ul>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div>
+      <div class="lbl text-slate-500 mb-2">Before: load + split repeated per consumer</div>
+      <div class="rounded-lg border border-slate-200 bg-white p-4">
+        <pre class="mermaid">
+flowchart LR
+  F[(CUAD files)] --> L1[load_corpus: run rules]
+  F --> L2[load_corpus: sizing]
+  F --> L3[load_corpus: corpus_facts]
+  L1 --> S1[split_document]
+  L2 --> S2[split_document]
+  F --> S3[partition_facts splits again]
+  F --> SS[sample_cli load + split]
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class L2,L3,S2,S3,SS leak
+        </pre>
+      </div>
+    </div>
+    <div>
+      <div class="lbl text-slate-500 mb-2">After: one prepared corpus</div>
+      <div class="rounded-lg border border-slate-200 p-4 space-y-2">
+        <div class="deep rounded-lg p-4 text-sm space-y-1">
+          <div class="lbl text-slate-300">Loaded + split corpus</div>
+          <div>documents · Clauses · highlights per Rule</div>
+          <div>Certified Negative sets · heading setting</div>
+        </div>
+        <div class="text-center text-slate-400">&darr; &darr; &darr; &darr;</div>
+        <div class="grid grid-cols-4 gap-1 text-center text-xs">
+          <div class="mod rounded p-1">pipeline</div><div class="mod rounded p-1">cost</div>
+          <div class="mod rounded p-1">partition</div><div class="mod rounded p-1">study</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p><b>Problem:</b> <span class="mono">run()</span> loads three times and splits twice more; per-Rule highlight filtering and <span class="mono">certified_by_rule</span> are rebuilt by hand though Document already has <span class="mono">highlights_for</span>.</p>
+  <p><b>Solution:</b> One module owns load, split, per-Rule highlights and the heading toggle; consumers take it prepared.</p>
+  <ul class="list-disc ml-6 text-sm">
+    <li>locality: heading toggle applied once</li>
+    <li>End-to-end tests stop reloading</li>
+    <li>leverage: four callers, one build</li>
+  </ul>
+</article>
+
+<!-- 4 -->
+<article id="c4" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+  <div class="flex flex-wrap items-center gap-2">
+    <h2 class="font-serif text-2xl mr-2">4. One owner for Binned, Escalated and "holds"</h2>
+    <span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">Worth exploring</span>
+    <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">in-process</span>
+  </div>
+  <ul class="mono text-sm text-slate-600">
+    <li>evaluator.py:124, 158, 281, 288, 331, 371 · cost.py:144 · sample_study.py:127 · pipeline.py:145-169</li>
+  </ul>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div>
+      <div class="lbl text-slate-500 mb-2">Before: definitions repeated in five places</div>
+      <div class="rounded-lg border border-slate-200 p-4 space-y-1 text-sm">
+        <div class="mod rounded p-2"><b>Binned</b> (p &le; cutoff) <span class="leak">&rarr;</span> evaluator <span class="mono">_at_cutoff</span></div>
+        <div class="mod rounded p-2"><b>Binned</b> again <span class="leak">&rarr;</span> evaluator <span class="mono">fully_binned</span></div>
+        <div class="mod rounded p-2"><b>Binned</b> again <span class="leak">&rarr;</span> cost <span class="mono">cost_usage</span></div>
+        <div class="mod rounded p-2"><b>holds</b> <span class="leak">&rarr;</span> _ground, free_saving, separation, draw_sample</div>
+        <div class="text-xs text-slate-500 pt-1">Same five inputs passed to three functions; each rebuilds ground truth; free_saving's <span class="mono">nextafter</span> depends on the rule living elsewhere.</div>
+      </div>
+    </div>
+    <div>
+      <div class="lbl text-slate-500 mb-2">After: per-Rule evaluation, inputs given once</div>
+      <div class="rounded-lg border border-slate-200 p-4 space-y-2">
+        <div class="deep rounded-lg p-4 text-sm space-y-1">
+          <div class="lbl text-slate-300">Per-Rule evaluation</div>
+          <div>metrics at a Cutoff · Cutoff Curve</div>
+          <div>Free Saving · Fully Binned share</div>
+          <div>owns Binned + holds definitions</div>
+        </div>
+        <div class="text-center text-slate-400">&darr;</div>
+        <div class="mod rounded p-2 lbl text-center">cost consumes Escalated sets</div>
+      </div>
+    </div>
+  </div>
+  <p><b>Problem:</b> Cost recomputes Fully Binned Clauses that the evaluator already computes, and inputs are assembled in pipeline.py where the pure functions' tests cannot see them.</p>
+  <p><b>Solution:</b> One module takes a Rule's Clauses, Highlights and P(yes) once and answers every question in ADR-0003's vocabulary.</p>
+  <ul class="list-disc ml-6 text-sm">
+    <li>locality: Binned defined once</li>
+    <li>Six test files cross one interface</li>
+    <li>One test: cost and evaluator agree</li>
+  </ul>
+</article>
+
+<!-- 5 -->
+<article id="c5" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+  <div class="flex flex-wrap items-center gap-2">
+    <h2 class="font-serif text-2xl mr-2">5. Share the run shell and the billing arithmetic</h2>
+    <span class="px-2 py-0.5 rounded text-xs font-semibold bg-slate-200 text-slate-700">Speculative</span>
+    <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">in-process</span>
+  </div>
+  <ul class="mono text-sm text-slate-600">
+    <li>cli.py:120-175 vs sample_cli.py:143-168 · cli.py:116 · report.py:~445 · cost.py _dollars</li>
+  </ul>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div>
+      <div class="lbl text-slate-500 mb-2">Before: two commands, same guards</div>
+      <div class="rounded-lg border border-slate-200 p-4 grid grid-cols-2 gap-2 text-xs">
+        <div class="mod rounded p-2">cli.py<br>CUAD check<br>workers check<br>build_client<br>error messages</div>
+        <div class="mod rounded p-2">sample_cli.py<br><span class="leak">CUAD check<br>workers check<br>build_client<br>error messages</span></div>
+        <div class="col-span-2 text-slate-500">tokens &rarr; dollars: cli, report, cost</div>
+      </div>
+    </div>
+    <div>
+      <div class="lbl text-slate-500 mb-2">After: one shell, one owner of dollars</div>
+      <div class="rounded-lg border border-slate-200 p-4 space-y-2">
+        <div class="deep rounded p-3 text-sm">Run shell: guards, client choice, error mapping</div>
+        <div class="deep rounded p-3 text-sm">Billed tokens &rarr; dollars, once</div>
+      </div>
+    </div>
+  </div>
+  <p><b>Problem:</b> Error messages and the price arithmetic can drift apart between commands.</p>
+  <p><b>Solution:</b> Extract the shared shell and a single billing owner. Do it after candidate 2; it depends on that telemetry seam.</p>
+  <ul class="list-disc ml-6 text-sm"><li>locality: one error message each</li><li>CLI tests stop duplicating</li></ul>
+</article>
+
+<!-- 6 -->
+<article id="c6" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
+  <div class="flex flex-wrap items-center gap-2">
+    <h2 class="font-serif text-2xl mr-2">6. Keep or archive the sample_* trio</h2>
+    <span class="px-2 py-0.5 rounded text-xs font-semibold bg-slate-200 text-slate-700">Speculative</span>
+    <span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700">not a deepening</span>
+  </div>
+  <ul class="mono text-sm text-slate-600">
+    <li>sample_study.py:159-187 · sample_cli.py · sample_report.py (~700 lines with tests) · pyproject.toml:12</li>
+  </ul>
+  <div class="rounded-lg border border-slate-200 p-4 text-sm space-y-2">
+    <div class="lbl text-slate-500">Cross-section</div>
+    <div class="border-l-4 border-slate-400 pl-3 py-2">Ticket 08 resolved; outputs live in config constants</div>
+    <div class="border-l-4 border-red-400 pl-3 py-2"><span class="mono mr-1">run_arm</span> calls run_pairs once per Rule: bypasses fan-out; only a separate cache directory prevents mixing (ADR-0006)</div>
+    <div class="border-l-4 border-slate-400 pl-3 py-2">Still a shipped command, and the way to rebuild the 08 report from cache</div>
+  </div>
+  <p><b>Problem:</b> Code that exercises a different call shape from production, still shipped.</p>
+  <p><b>Solution:</b> Deletion test: removing it concentrates nothing. Decide keep or archive as a scope question.</p>
+  <div class="rounded border border-amber-300 bg-amber-50 text-amber-900 text-sm p-3">Note: report duplication between report.py and sample_report.py is weaker than suspected. They share an idiom, not logic.</div>
+</article>
+
+</section>
+
+<section class="rounded-xl border border-slate-200 bg-white p-6 space-y-3">
+  <h2 class="font-serif text-xl">Checked and already deep: leave alone</h2>
+  <ul class="list-disc ml-6 text-sm space-y-1">
+    <li><b>splitter.py</b>: one public <span class="mono">split_document</span>, four ordered passes behind it; the split test files are topic splits, not leakage.</li>
+    <li><b>TypeSafeJevClient</b>: retry, pacing, model pin, usage and reply validation behind one method; transport, clock and sleep injected.</li>
+    <li><b>report.render(ReportInputs)</b>: pure, one-function interface; long but local.</li>
+    <li>Tests: no test imports an underscore name.</li>
+  </ul>
+</section>
+
+<section id="top-recommendation" class="rounded-xl deep p-8 space-y-3">
+  <div class="lbl text-slate-300">Top recommendation</div>
+  <h2 class="font-serif text-2xl">Start with 2, then 1</h2>
+  <p class="text-slate-200">Candidate 2 (<a href="#c2" class="underline">JevClient, one head</a>) is the smaller change and removes the <span class="mono">getattr</span> discovery that candidates 1 and 5 would otherwise build on. Candidate 1 (<a href="#c1" class="underline">answer cache</a>) then gets one telemetry seam to own, and it is the one that stops the ticket-10 bug class from coming back.</p>
+</section>
+
+</main>
+</body>
+</html>

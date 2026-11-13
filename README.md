@@ -46,8 +46,8 @@ uv run jev-cascade --jev real --full --out out/real               # asks Jev; re
 uv run jev-cascade --jev real --full --out out/real --from-cache  # the final report; no key, no calls
 ```
 
-The report is reproducible from the cache, not from scratch: real Jev moves by up to 0.04 between runs
-on the same Pair. `--full` cannot be combined with `--doc` or `--rule`. `--workers N` sets how many
+The report is reproducible from the cache, not from scratch: real Jev moved by up to 0.04 between runs
+on the same Pair (measured on one question a call, before the fan-out). `--full` cannot be combined with `--doc` or `--rule`. `--workers N` sets how many
 calls are in flight (32 for the real client, 1 for the stub); it changes the speed, never the answers.
 
 ## Where things are

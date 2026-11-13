@@ -399,10 +399,51 @@ def _stub_to_real_section(inputs: ReportInputs) -> list[str]:
         "**Reproducible from the cache, not from scratch.** Every P(yes) is read from the cache this "
         "run wrote, and this report is rebuilt from it with no call. Asking Jev again would not "
         "give the same numbers: real Jev moved by up to 0.04 between runs on the same Pair, "
-        "without flipping any decision at 0.5, so a fresh run is expected to agree to about that "
-        "and no better.",
+        "without flipping any decision at 0.5. That was measured on one question a call (ticket "
+        "11), not on the fan-out this run uses, so read it as a guide to how closely a fresh run "
+        "would agree and not a measured bound.",
         "",
     ]
+
+
+def _billed_section(inputs: ReportInputs) -> list[str]:
+    """What Jev's own replies say it billed, beside the estimate the cost figures rest on.
+
+    The estimate counts the Clause once for every question, because how Jev bills the fan-out was
+    not known. Reported over estimated near 100% would mean it does; near one seventh, that the
+    Clause is billed once a call.
+    """
+    billed = inputs.stats.billed_input_tokens
+    estimated = inputs.cost.usage.jev.input_tokens
+    lines = ["### What Jev billed", ""]
+    if billed is None:
+        lines.append(
+            "Not recorded: some call behind these figures has no usage from Jev's reply (a cache "
+            "written before usage was stored, or a client that does not report it), and a partial "
+            "sum would understate the bill. The dollar figures above are the estimate."
+        )
+        lines.append("")
+        return lines
+    price = config.JEV_INPUT_PRICE
+    against = _format_share(billed / estimated) if estimated else "n/a"
+    lines.extend(
+        [
+            "The input tokens Jev's replies reported for this run, counted once per call, against "
+            "the estimate. The measured figure is Jev's own count; the price is the vendor's "
+            "published one, so the invoice is the last check.",
+            "",
+            "| | |",
+            "| --- | --- |",
+            f"| Input tokens Jev reported | {billed:,} |",
+            f"| Estimated for the same run, counting the Clause once per question | "
+            f"{estimated:,} |",
+            f"| Reported against estimated | {against} |",
+            f"| Cost at the published price, from the reported tokens | "
+            f"${billed * price.value / 1_000_000:.4f} |",
+            "",
+        ]
+    )
+    return lines
 
 
 def _usd(value: float | None) -> str:
@@ -518,6 +559,8 @@ def _cost_section(inputs: ReportInputs) -> list[str]:
         f"{config.JEV_RATE_LIMIT_PER_MINUTE.value:,.0f} a minute) |"
     )
     lines.append("")
+
+    lines.extend(_billed_section(inputs))
 
     full = cost.full_run
     lines.append("### The full run")

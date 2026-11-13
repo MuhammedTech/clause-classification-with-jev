@@ -411,6 +411,7 @@ def test_every_question_goes_in_one_request_and_each_answer_is_read_by_its_id():
     answers = ask_many(client(transport))
 
     assert answers == {"R1": 0.9, "R2": 0.1}
+    assert answers.input_tokens == 40  # the call's own usage rides with its answers
     ((_, _, body),) = transport.requests  # one request, not two
     assert body["state"] == "12. LIMITATION OF LIABILITY\n\nLiability is capped at fees paid."
     assert body["questions"] == {
@@ -433,7 +434,7 @@ def test_the_input_tokens_the_replies_report_are_added_up():
     assert c.input_tokens == 80
 
 
-def test_a_single_question_is_the_same_request_as_before_the_fan_out():
+def test_p_yes_directly_still_sends_its_one_question_under_the_id_q():
     transport = FakeTransport(ok(0.83))
     assert ask(client(transport)) == 0.83
     ((_, _, body),) = transport.requests

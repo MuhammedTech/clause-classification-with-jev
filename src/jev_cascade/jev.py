@@ -42,6 +42,18 @@ class JevClient(Protocol):
         ...
 
 
+class FanOutAnswers(dict):
+    """P(yes) by question id, and the input tokens Jev reported billing for the call, if it did.
+
+    A plain `dict` of answers is just as good to the runner, which records `input_tokens` only when
+    the client supplies it.
+    """
+
+    def __init__(self, answers: Mapping[str, float], input_tokens: int | None = None):
+        super().__init__(answers)
+        self.input_tokens = input_tokens
+
+
 def ask_many(
     client: JevClient,
     clause_text: str,

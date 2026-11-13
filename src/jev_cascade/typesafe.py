@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Mapping
 
 from . import config
+from .jev import FanOutAnswers
 
 #: The environment variable the key is read from. It is never read from the repo.
 API_KEY_ENV = "JEV_API_KEY"
@@ -222,17 +223,20 @@ class TypeSafeJevClient:
             }
         except (KeyError, TypeError, ValueError) as error:
             raise JevError(f"unexpected reply shape from Jev: {str(reply)[:200]}") from error
-        self._count_usage(reply)
-        return answers
+        return FanOutAnswers(answers, input_tokens=self._count_usage(reply))
 
-    def _count_usage(self, reply: dict) -> None:
-        """Add up the input tokens Jev says it billed, so the run can check its price estimate."""
+    def _count_usage(self, reply: dict) -> int | None:
+        """The input tokens Jev says this call billed, added to the client's running total.
+
+        `None` when the reply carries no usage, which is not an error: the answers are what matter.
+        """
         try:
             tokens = int(reply["usage"]["input_tokens"])
         except (KeyError, TypeError, ValueError):
-            return  # a reply with no usage is not an error: the answers are what matter
+            return None
         with self._lock:
             self.input_tokens += tokens
+        return tokens
 
     def _pace(self) -> None:
         """Wait, if need be, so calls start at least one interval apart, across all threads.

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import pytest
 
 from jev_cascade import config
-from jev_cascade.jev import CacheOnlyJevClient, StubJevClient
+from jev_cascade.jev import CacheOnlyJevClient, FanOutAnswers, StubJevClient
 from jev_cascade.pipeline import run
 
 pytestmark = pytest.mark.skipif(
@@ -21,7 +21,17 @@ pytestmark = pytest.mark.skipif(
 RUN_START = datetime(2026, 11, 13, 12, 0, 0, tzinfo=timezone.utc).timestamp()
 
 
+#: What each fake call reports having been billed.
+TOKENS_PER_CALL = 1_000
+
+
 class RealLikeClient(StubJevClient):
+    def p_yes_many(self, clause_text, parent_line, questions, question_type):
+        return FanOutAnswers(
+            super().p_yes_many(clause_text, parent_line, questions, question_type),
+            input_tokens=TOKENS_PER_CALL,
+        )
+
     @property
     def model_version(self) -> str:
         return "jev-1.14.0"
@@ -105,3 +115,32 @@ def test_the_report_says_every_rule_is_asked_in_one_call_and_what_that_changes(r
     assert "one call per Clause" in cost
     # The token figure is the cautious one until the replies' own usage is known.
     assert "cautious" in cost
+
+
+def test_the_cost_section_puts_what_jev_billed_beside_the_estimate(result):
+    markdown = result.markdown
+    cost = markdown[markdown.index("### What Jev billed") : markdown.index("### The full run")]
+    calls = result.cost.usage.jev.calls  # one call a Clause
+    measured = calls * TOKENS_PER_CALL
+
+    def row(label):
+        line = next(l for l in cost.splitlines() if l.startswith(f"| {label}"))
+        return line.strip().strip("|").split("|")[1].strip()
+
+    assert row("Input tokens Jev reported") == f"{measured:,}"
+    estimated = result.cost.usage.jev.input_tokens
+    assert row("Estimated for the same run") == f"{estimated:,}"
+    # Reported over estimated tells whether Jev bills the Clause once a call or once a question.
+    assert row("Reported against estimated") == f"{measured / estimated:.1%}"
+    assert row("Cost at the published price, from the reported tokens") == (
+        f"${measured * config.JEV_INPUT_PRICE.value / 1_000_000:.4f}"
+    )
+
+
+def test_a_cache_with_no_usage_says_the_bill_is_not_recorded(tmp_path):
+    out = tmp_path
+    # The plain stub does not report usage, so no row carries it.
+    run(client=StubJevClient(), out_dir=out)
+    again = run(client=CacheOnlyJevClient(StubJevClient()), out_dir=out)
+    cost = again.markdown[again.markdown.index("### What Jev billed") :]
+    assert "not recorded" in cost[: cost.index("### The full run")].lower()

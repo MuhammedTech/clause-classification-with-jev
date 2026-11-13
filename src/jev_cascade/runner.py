@@ -81,6 +81,10 @@ class RunStats:
     #: When every answer behind the table arrived, or `None` if the cache has no timestamps for
     #: them (a cache written before ticket 09).
     timing: AnswerTiming | None = None
+    #: The input tokens Jev reported billing for every call behind the table, counted once per call,
+    #: or `None` if any of those calls has no recorded usage (an older cache, or a client that does
+    #: not report it): a partial sum would understate the bill.
+    billed_input_tokens: int | None = None
 
 
 def answer_timing(stamps: Iterable[float]) -> AnswerTiming | None:
@@ -120,6 +124,11 @@ def _key(clause: Clause, rule: Rule, model_version: str, question_type: str) -> 
     )
 
 
+def _call_id(key: PairKey, asked_at: float) -> tuple:
+    """What identifies the call a row came from: what Jev was shown, and when it answered."""
+    return (key[0], key[1], key[2], key[6], asked_at)
+
+
 def read_cache(path: Path) -> dict[PairKey, float]:
     """Load every answer already on disk.
 
@@ -129,12 +138,18 @@ def read_cache(path: Path) -> dict[PairKey, float]:
     return read_cache_with_stamps(path)[0]
 
 
-def read_cache_with_stamps(path: Path) -> tuple[dict[PairKey, float], dict[PairKey, float]]:
-    """Every answer on disk, and when each arrived (rows written before ticket 09 have no stamp)."""
+def read_cache_with_stamps(
+    path: Path,
+) -> tuple[dict[PairKey, float], dict[PairKey, float], dict[PairKey, int]]:
+    """Every answer on disk, when each arrived, and the input tokens its call was billed.
+
+    Rows written before ticket 09 have no stamp, and before the fan-out had no usage.
+    """
     answers: dict[PairKey, float] = {}
     stamps: dict[PairKey, float] = {}
+    usages: dict[PairKey, int] = {}
     if not Path(path).exists():
-        return answers, stamps
+        return answers, stamps, usages
 
     with Path(path).open(encoding="utf-8") as handle:
         for line in handle:
@@ -155,11 +170,13 @@ def read_cache_with_stamps(path: Path) -> tuple[dict[PairKey, float], dict[PairK
                 answers[key] = float(row["p_yes"])
                 if "asked_at" in row:
                     stamps[key] = float(row["asked_at"])
+                if "input_tokens" in row:
+                    usages[key] = int(row["input_tokens"])
             except (json.JSONDecodeError, KeyError, TypeError, ValueError):
                 # A half-written line, or one written before the fingerprint existed. Either way
                 # the Pair is simply asked again.
                 continue
-    return answers, stamps
+    return answers, stamps, usages
 
 
 def _close_dangling_line(path: Path) -> None:
@@ -186,26 +203,36 @@ def _row(
     question_type: str,
     p_yes: float,
     asked_at: float,
+    input_tokens: int | None = None,
 ) -> str:
-    return (
-        json.dumps(
-            {
-                "doc_id": clause.doc_id,
-                "clause_start": clause.start,
-                "clause_end": clause.end,
-                "rule_id": rule.id,
-                "question_type": question_type,
-                "model_version": model_version,
-                "prompt_fingerprint": prompt_fingerprint(clause.parent_line, clause.text),
-                "question": rule.detection_question,
-                "p_yes": p_yes,
-                # Not part of the key. It is what lets a rebuild report the run's own timing.
-                "asked_at": round(asked_at, 3),
-            },
-            ensure_ascii=False,
-        )
-        + "\n"
-    )
+    row = {
+        "doc_id": clause.doc_id,
+        "clause_start": clause.start,
+        "clause_end": clause.end,
+        "rule_id": rule.id,
+        "question_type": question_type,
+        "model_version": model_version,
+        "prompt_fingerprint": prompt_fingerprint(clause.parent_line, clause.text),
+        "question": rule.detection_question,
+        "p_yes": p_yes,
+        # Neither of these is part of the key. They are what lets a rebuild report the run's own
+        # timing and what Jev billed, which are unrecoverable once the calls are paid for.
+        "asked_at": round(asked_at, 3),
+    }
+    if input_tokens is not None:
+        # The whole call's figure, repeated on each of its rows. Count it once per call.
+        row["input_tokens"] = input_tokens
+    return json.dumps(row, ensure_ascii=False) + "\n"
+
+
+def _billed_tokens(
+    keys: set[PairKey], stamps: dict[PairKey, float], usages: dict[PairKey, int]
+) -> int | None:
+    """What Jev billed for the calls behind `keys`, once per call, or `None` if any is unknown."""
+    if not keys or any(key not in usages or key not in stamps for key in keys):
+        return None
+    per_call = {_call_id(key, stamps[key]): usages[key] for key in keys}
+    return sum(per_call.values())
 
 
 def run_pairs(
@@ -243,7 +270,7 @@ def run_pairs(
     cache_path = Path(cache_path)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
 
-    cached, stamps = read_cache_with_stamps(cache_path)
+    cached, stamps, usages = read_cache_with_stamps(cache_path)
     model_version = client.model_version
     _close_dangling_line(cache_path)
 
@@ -296,10 +323,15 @@ def run_pairs(
             # Written before it leaves `in_flight`, so an error while writing cannot also make the
             # drain forget the call. Flushed per call so an interruption loses at most the calls
             # still in flight.
+            billed = getattr(answers, "input_tokens", None)
             for (rule, key), p_yes in zip(asked, values):
                 cached[key] = p_yes
                 stamps[key] = asked_at
-                handle.write(_row(clause, rule, model_version, question_type, p_yes, asked_at))
+                if billed is not None:
+                    usages[key] = billed
+                handle.write(
+                    _row(clause, rule, model_version, question_type, p_yes, asked_at, billed)
+                )
             handle.flush()
             del in_flight[future]
 
@@ -340,6 +372,7 @@ def run_pairs(
     for rule_id, clause_key, key in needed:
         table[rule_id][clause_key] = cached[key]
 
+    needed_keys = {key for _, _, key in needed}
     stats = RunStats(
         pairs=len(clauses) * len(rules),
         calls_made=calls_made,
@@ -347,8 +380,7 @@ def run_pairs(
         seconds=time.monotonic() - started,
         # Distinct stamps are calls: the rows of one call share a stamp. Two calls landing in the
         # same millisecond would count as one, which is negligible beside thousands of calls.
-        timing=answer_timing(
-            {stamps[key] for key in {key for _, _, key in needed} if key in stamps}
-        ),
+        timing=answer_timing({stamps[key] for key in needed_keys if key in stamps}),
+        billed_input_tokens=_billed_tokens(needed_keys, stamps, usages),
     )
     return table, stats

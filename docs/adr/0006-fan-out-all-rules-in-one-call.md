@@ -26,8 +26,9 @@ its own question, wording and P(yes).
 - **Mixing cache rows is wrong.** Answers from one-question calls and from fan-out calls share a
   cache key. Keep a fan-out run's cache in its own directory (`out/real`), as the README does.
 - **The token estimate is now an upper bound.** The cost model still counts the Clause once per
-  question, in case Jev bills it that way. The replies carry `usage`, the client adds it up and the
-  command prints it, so the real figure is known after the first run.
+  question, in case Jev bills it that way. The replies carry `usage`, which the runner stores on every
+  row of the call, so the report puts the measured tokens beside the estimate and a rebuild shows
+  them too. Reported over estimated says whether Jev bills the shared Clause once or per question.
 - **A call is all or nothing.** If one fails, none of its Rules is cached, and a resume asks only the
   Rules still missing for that Clause.
 

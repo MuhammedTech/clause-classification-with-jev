@@ -135,6 +135,14 @@ _Avoid_: AUC (in prose), accuracy, discrimination
 **Pair**:
 One Clause judged against one Rule; the unit every outcome is counted on.
 
+**Fan-out**:
+Asking Jev every Rule's question about a Clause in **one call**: the Clause is sent once and each
+question is answered separately, under its own id. A full run is 3,246 calls (one per Clause) for
+22,722 Pairs, and the cache still holds one row per Pair. See
+[ADR-0006](docs/adr/0006-fan-out-all-rules-in-one-call.md).
+_Avoid_: batching (that means the expensive model's discounted asynchronous mode), compound question
+(the fan-out sends seven questions, not one question with seven parts)
+
 **Cutoff**:
 The P(yes) at or below which a Clause is Binned. One per Rule. In plain speech, "the line". It is a
 discard-risk threshold, **not** a yes/no threshold: a Clause just above it is a weak "no" we do not

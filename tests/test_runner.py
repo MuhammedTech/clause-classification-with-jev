@@ -13,6 +13,7 @@ from jev_cascade.jev import (
 )
 from jev_cascade.config import QUESTION_TYPE
 from jev_cascade.rulebook import rule
+from jev_cascade.jev import FanOutAnswers
 from jev_cascade.runner import read_cache, run_pairs
 
 R1 = rule("R1")
@@ -416,3 +417,54 @@ def test_a_client_that_cannot_fan_out_is_asked_one_question_at_a_time(tmp_path):
     table, stats = run_pairs(clauses(), [R1, R2], OneAtATime(), tmp_path / "pyes.jsonl")
     assert client.calls == 6
     assert len(table["R1"]) == len(table["R2"]) == 3
+
+
+# ---- Usage: the input tokens Jev says each call billed -------------------------------------------
+
+
+class ReportingClient(StubJevClient):
+    """The stub that reports a usage figure for every call, as the real replies do."""
+
+    def __init__(self, tokens_per_call=100):
+        super().__init__()
+        object.__setattr__(self, "tokens_per_call", tokens_per_call)
+
+    def p_yes_many(self, clause_text, parent_line, questions, question_type):
+        return FanOutAnswers(
+            {qid: self.p_yes(clause_text, parent_line, q, question_type) for qid, q in questions.items()},
+            input_tokens=self.tokens_per_call,
+        )
+
+
+def test_each_call_reports_its_billed_tokens_once_however_many_rows_it_wrote(tmp_path):
+    cache = tmp_path / "pyes.jsonl"
+
+    _, stats = run_pairs(clauses(), [R1, R2], ReportingClient(100), cache)
+
+    # Three calls of 100 tokens: 300, not 600 for the six rows.
+    assert stats.billed_input_tokens == 300
+    rows = [json.loads(line) for line in cache.read_text().splitlines()]
+    assert [row["input_tokens"] for row in rows] == [100] * 6
+
+
+def test_a_rebuild_from_the_cache_still_reports_what_the_run_was_billed(tmp_path):
+    cache = tmp_path / "pyes.jsonl"
+    run_pairs(clauses()[:2], [R1, R2], ReportingClient(100), cache)
+    run_pairs(clauses()[2:], [R1, R2], ReportingClient(250), cache)  # a resumed session
+
+    _, rebuilt = run_pairs(clauses(), [R1, R2], CountingJevClient(StubJevClient()), cache)
+
+    assert rebuilt.calls_made == 0
+    assert rebuilt.billed_input_tokens == 100 + 100 + 250
+
+
+def test_a_client_that_reports_no_usage_leaves_the_figure_unknown(tmp_path):
+    _, stats = run_pairs(clauses(), [R1, R2], RecordingManyClient(), tmp_path / "pyes.jsonl")
+    assert stats.billed_input_tokens is None
+
+
+def test_one_call_without_usage_makes_the_total_unknown_not_understated(tmp_path):
+    cache = tmp_path / "pyes.jsonl"
+    run_pairs(clauses()[:1], [R1, R2], RecordingManyClient(), cache)  # no usage on these rows
+    _, stats = run_pairs(clauses(), [R1, R2], ReportingClient(100), cache)
+    assert stats.billed_input_tokens is None

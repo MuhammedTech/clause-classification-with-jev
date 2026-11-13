@@ -8,8 +8,8 @@ from pathlib import Path
 from . import config
 from .clients import KINDS, build_client, default_workers
 from .jev import JevCallRefused
-from .rulebook import RULEBOOK
 from .pipeline import DEFAULT_CUTOFF, DEFAULT_RULE_IDS, TRACER_DOC_IDS, run
+from .rulebook import RULEBOOK
 from .typesafe import JevError
 
 

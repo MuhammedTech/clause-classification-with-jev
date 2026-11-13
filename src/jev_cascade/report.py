@@ -188,8 +188,7 @@ def _rulebook_section(corpus: CorpusFacts) -> list[str]:
     )
     lines.append("")
     lines.append(
-        "The Detection Questions below are **drafted and awaiting the user's review in ticket "
-        "08**, which is a human checkpoint before any real run:"
+        "The Detection Questions below are the wording approved in ticket 08, asked word for word:"
     )
     lines.append("")
     for rule in RULEBOOK:
@@ -353,7 +352,9 @@ def _net_savings_paragraph(inputs: ReportInputs) -> list[str]:
     return [
         "**Net savings** per 1,000 Clauses at the same Cutoff, against the expensive model alone, "
         "after paying Jev for every Pair: " + "; ".join(cells) + ". An estimate from token counts "
-        "at list prices, so an order of magnitude and not a quote; see Cost and time.",
+        "at list prices, so an order of magnitude and not a quote; see Cost and time. Jev's own "
+        "part is the cautious estimate, so the savings are, if anything, slightly understated "
+        "when Jev's reported tokens (under Cost and time) come in lower.",
         "",
     ]
 
@@ -804,7 +805,7 @@ def _vendor_caveats_section() -> list[str]:
         "answer. This report does not test for it.",
         "- Jev's probabilities depend on how the question is asked: the same question put as a "
         "different question type has given very different probabilities elsewhere. The question "
-        "type and wording are settled in ticket 08, before the real run.",
+        "type and wording were settled in ticket 08, before the real run.",
         "",
     ]
 

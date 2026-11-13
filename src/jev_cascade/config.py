@@ -166,8 +166,8 @@ JEV_CONTEXT_PER_QUESTION_TOKENS = Sourced(
     32_000,
     "tokens per question: the state plus that one question",
     "https://docs.typesafe.ai/models.md (default context window). With every Rule's question in "
-    "one call the request limit also applies, but neither is near the largest Clause. Over it the API answers HTTP 400 `max_tokens_exceeded` "
-    "(https://docs.typesafe.ai/api/errors.md)",
+    "one call the request limit also applies, but neither is near the largest Clause. Over it the "
+    "API answers HTTP 400 `max_tokens_exceeded` (https://docs.typesafe.ai/api/errors.md)",
     "2026-11-12",
 )
 

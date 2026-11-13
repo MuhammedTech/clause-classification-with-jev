@@ -50,3 +50,17 @@ fan-out (ADR-0006) and approved the paid run. The report is rebuilt from the cac
   net savings per 1,000 Clauses ($7.451 against Sonnet 5.5, $14.985 against Opus 5.5).
 - Not measured: how far the fan-out moved probabilities against the one-question calls ticket 08 used.
   If a Rule looks off, `--rule` asks it alone.
+
+**Code review (Standards and Spec), settled in the follow-up commit.** Fixed: the report still called
+ticket 08's questions "drafted and awaiting the user's review" and "settled" (now approved and
+settled, with a test); the net-savings paragraph now says Jev's part is the cautious estimate, so the
+savings are if anything understated; `cli.py` import order; one over-long `config.py` line.
+
+Left alone, as judgement calls: the `p_yes_many` fallback in `ask_many` and `FanOutAnswers(dict)` stay
+(an old-client path costs little and `ask_many` is the single place that decides); `PairKey` indexing,
+`read_cache_with_stamps`'s three parallel dicts and `_Ground`'s string kinds are a refactor for
+`/improve-codebase-architecture`, not this ticket. Known and harmless: `timing.answers` counts distinct
+millisecond stamps, so it is 12 under the 3,246 calls (about 0.4% on the Jev wall-clock figure); and
+`--rule R1` rebuilt from the fan-out cache would set a whole call's reported tokens against a one-Rule
+estimate, so read the billed ratio only on the full run. A few other added lines run past 100
+columns; no tooling enforces it.

@@ -82,6 +82,12 @@ def test_no_figure_is_labelled_as_stub(result):
     assert [l for l in mentions if l not in allowed] == []
 
 
+def test_the_report_no_longer_says_ticket_08_is_awaiting_review(result):
+    # Ticket 08 is resolved, so the report must not call its wording a draft awaiting the user.
+    assert "awaiting" not in result.markdown.lower()
+    assert "human checkpoint" not in result.markdown.lower()
+
+
 def test_the_report_says_it_is_reproducible_from_the_cache_not_from_scratch(result):
     markdown = result.markdown
     assert "reproducible from the cache, not from scratch" in markdown.lower()

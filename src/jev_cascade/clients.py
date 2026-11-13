@@ -14,6 +14,17 @@ from .typesafe import API_KEY_ENV, JevAuthError, TypeSafeJevClient
 
 KINDS = ("stub", "real")
 
+#: Calls in flight when `--workers` is not given. The real client waits on the network, and under
+#: load a call took about a second, so it needs a wide window to reach its request limit
+#: (1,200 a minute is 20 a second). Measured on 432 real Pairs on 2026-11-13: 16 workers gave 15.2
+#: requests a second, 32 gave 18.5, neither drew a single 429. The stub answers instantly, so
+#: concurrency would only reorder its cache.
+DEFAULT_REAL_WORKERS = 32
+
+
+def default_workers(kind: str) -> int:
+    return DEFAULT_REAL_WORKERS if kind == "real" else 1
+
 
 def build_client(
     kind: str = "stub",

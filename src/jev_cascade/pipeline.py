@@ -97,6 +97,7 @@ def run(
     cutoff: float = DEFAULT_CUTOFF,
     out_dir: Path | None = None,
     cuad_directory: Path | None = None,
+    workers: int = 1,
 ) -> RunResult:
     """Take the documents through every stage and write the report."""
     client = client if client is not None else StubJevClient()
@@ -127,7 +128,7 @@ def run(
         )
 
     cache_path = out_dir / "pyes.jsonl"
-    table, stats = run_pairs(clauses, rules, client, cache_path)
+    table, stats = run_pairs(clauses, rules, client, cache_path, workers=workers)
 
     metrics = tuple(
         evaluate_rule(

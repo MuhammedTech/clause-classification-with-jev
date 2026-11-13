@@ -277,8 +277,9 @@ estimate (characters over 4, since there is no tokenizer in the code), and the r
 beside its sources, so read it as an order of magnitude. Ticket 07 confirmed the price against the
 vendor's models page ($0.042 per million input tokens, output free). The 1,200 requests a minute
 limit is still third-party; the vendor says only that limits are per organization. Measured on the
-real client, a call takes about 0.4s, so the serial runner needs roughly 2.5 hours for the full run,
-not 20 minutes, unless it is made concurrent.
+real client, a call takes 0.4 to 1s, so a serial run would need 2.5 to 6 hours. Ticket 11 made the
+runner concurrent: 32 calls in flight reached 18.5 requests a second, so the full run is about 20
+minutes. Jev is not exactly repeatable: the same Pair differs by up to 0.04 between runs.
 
 ## Reproducing these numbers
 

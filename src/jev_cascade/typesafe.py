@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import http.client
 import json
+import threading
 import time
 import urllib.error
 import urllib.request
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -98,7 +100,14 @@ class TypeSafeJevClient:
     #: The first backoff wait, doubled on each later retry and capped at `max_backoff`.
     backoff: float = 1.0
     max_backoff: float = 30.0
+    #: Retries so far, by what caused them (`"429"`, `"529"`, `"connection"`, ...). The run prints
+    #: it, because the real rate limit is unverified and a 429 is how it would show.
+    retries: Counter = field(default_factory=Counter, init=False, repr=False, compare=False)
     _next_call_at: float = field(default=0.0, init=False, repr=False)
+    #: Guards `_next_call_at` and `retries`: the runner may call `p_yes` from several threads.
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False, compare=False
+    )
 
     @property
     def model_version(self) -> str:
@@ -148,13 +157,23 @@ class TypeSafeJevClient:
             raise JevError(f"unexpected reply shape from Jev: {str(reply)[:200]}") from error
 
     def _pace(self) -> None:
-        """Wait, if need be, so calls start at least one interval apart."""
+        """Wait, if need be, so calls start at least one interval apart, across all threads.
+
+        The slot is **reserved under the lock and slept for outside it**, so concurrent callers are
+        handed consecutive slots instead of all taking the same one, and none waits on another's
+        sleep.
+        """
         interval = 60.0 / self.requests_per_minute
-        now = self.clock()
-        if self._next_call_at > now:
-            self.sleep(self._next_call_at - now)
-            now = self._next_call_at
-        self._next_call_at = now + interval
+        with self._lock:
+            now = self.clock()
+            start = max(now, self._next_call_at)
+            self._next_call_at = start + interval
+        if start > now:
+            self.sleep(start - now)
+
+    def _count_retry(self, cause: str) -> None:
+        with self._lock:
+            self.retries[cause] += 1
 
     def _post(self, body: bytes, headers: dict) -> dict:
         """One request, retried on transient failures; anything else raises at once."""
@@ -168,6 +187,7 @@ class TypeSafeJevClient:
             except (OSError, http.client.HTTPException) as error:
                 # Timeouts, dropped connections and a body cut off mid-read.
                 last = f"connection failed: {error!r}"
+                self._count_retry("connection")
                 continue
 
             if status == 200:
@@ -175,10 +195,12 @@ class TypeSafeJevClient:
                     return json.loads(payload)
                 except ValueError:  # a cut-off body: JSON or UTF-8 decoding failed
                     last = "HTTP 200 with a body that is not JSON"
+                    self._count_retry("bad body")
                     continue
             text = payload.decode("utf-8", errors="replace")[:200]
             if status in _RETRYABLE_STATUSES or status >= 500:
                 last = f"HTTP {status}"
+                self._count_retry(str(status))
                 continue
             if status == 401:
                 raise JevAuthError(f"Jev rejected the key (HTTP 401): {text}")

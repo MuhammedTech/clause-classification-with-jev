@@ -33,7 +33,8 @@ uv run jev-cascade --out out --from-cache   # rebuild the report from the cache;
 
 The default is the signal-free stub. `--jev real` asks TypeSafe's Jev (pinned to `jev-1.14.0`) and
 reads the key from `JEV_API_KEY` in the environment, never from the repo. Load a git-ignored `.env`
-into the shell first: `set -a; . ./.env; set +a`. `--from-cache` needs no key.
+into the shell first: `set -a; . ./.env; set +a`. `--from-cache` needs no key. `--workers N` sets how many
+calls are in flight (32 for the real client, 1 for the stub); it changes the speed, never the answers.
 
 ## Where things are
 
@@ -54,7 +55,7 @@ into the shell first: `set -a; . ./.env; set +a`. `--from-cache` needs no key.
 
 ## Status
 
-Tickets 01 to 07 are built. The run scores one Rule (R1) on three documents with the stub client at
+Tickets 01 to 07 and 11 are built. The run scores one Rule (R1) on three documents with the stub client at
 one fixed Cutoff plus the whole Cutoff Curve, and **every figure it prints is stub-derived and
 carries no signal** (the cost section's full-run Jev estimate is the exception: it needs no P(yes)).
 The report's

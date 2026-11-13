@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from . import config
-from .clients import KINDS, build_client
+from .clients import KINDS, build_client, default_workers
 from .jev import JevCallRefused
 from .pipeline import DEFAULT_CUTOFF, DEFAULT_RULE_IDS, TRACER_DOC_IDS, run
 from .typesafe import JevError
@@ -56,6 +56,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Jev calls in flight at once. Changes the speed of a run, never its answers. Default "
+            f"{default_workers('real')} for --jev real and 1 for the stub."
+        ),
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=0,
@@ -82,6 +92,10 @@ def main(argv: list[str] | None = None) -> int:
             "CUAD_DIR to where CUAD_v1.json and master_clauses.csv live."
         )
 
+    workers = args.workers if args.workers is not None else default_workers(args.jev)
+    if workers < 1:
+        parser.error("--workers must be at least 1")
+
     try:
         client = build_client(args.jev, seed=args.seed, from_cache=args.from_cache)
     except JevError as error:
@@ -94,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
             rule_ids=tuple(args.rule_ids) if args.rule_ids else DEFAULT_RULE_IDS,
             cutoff=args.cutoff,
             out_dir=args.out,
+            workers=workers,
         )
     except JevCallRefused:
         parser.error(
@@ -111,6 +126,10 @@ def main(argv: list[str] | None = None) -> int:
         f"{result.stats.pairs} Pairs: {result.stats.calls_made} Jev calls, "
         f"{result.stats.cache_hits} from cache, {result.stats.seconds:.2f}s"
     )
+    retries = getattr(getattr(client, "inner", client), "retries", None)
+    if retries:
+        # A 429 here would mean the request limit is lower than the 1,200 a minute assumed.
+        print("Retries: " + ", ".join(f"{count} x {cause}" for cause, count in sorted(retries.items())))
     return 0
 
 

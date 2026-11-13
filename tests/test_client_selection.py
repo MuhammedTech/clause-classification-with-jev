@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from jev_cascade.clients import build_client
+from jev_cascade.clients import build_client, default_workers
 from jev_cascade.jev import CacheOnlyJevClient, JevCallRefused, StubJevClient
 from jev_cascade.typesafe import JevAuthError, TypeSafeJevClient
 
@@ -43,3 +43,10 @@ def test_rebuilding_from_the_cache_needs_no_key_and_cannot_ask_jev():
 def test_an_unknown_kind_is_refused():
     with pytest.raises(ValueError, match="gpt"):
         build_client("gpt", environ={})
+
+
+def test_the_real_client_runs_concurrently_by_default_and_the_stub_does_not():
+    # The real client waits on the network, so it is only fast with calls in flight. The stub
+    # answers instantly, and concurrency would only reorder its cache.
+    assert default_workers("stub") == 1
+    assert default_workers("real") == 32

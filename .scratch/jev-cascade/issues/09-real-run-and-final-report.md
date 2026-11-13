@@ -23,3 +23,10 @@ is nothing to re-check here and no backup Rule to swap in.
       setting and the run date.
 - [ ] The report's per-Rule headline is the lowest P(yes) given to a held Clause and the Binned Share
       achievable below it, beside the Fully Binned Clause share and the net savings.
+
+## Comments
+
+**From ticket 11.** The runner is concurrent now, so `uv run jev-cascade --jev real` already uses 32
+calls in flight, measured at 18.5 requests a second, about 20 minutes for the full run. Real Jev is
+not exactly repeatable (up to 0.04 between runs on the same Pair, no decision flipping at 0.5), so say
+in the final report that it is reproducible from the cache, not from scratch.

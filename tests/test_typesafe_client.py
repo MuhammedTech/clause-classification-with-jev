@@ -201,6 +201,54 @@ def test_a_too_long_clause_is_reported_as_too_long_not_retried():
     assert len(transport.requests) == 1
 
 
+def test_threads_share_one_request_budget():
+    import threading
+
+    class RecordingClock:
+        """Time stands still and sleeps are only recorded, so the waits show the reserved slots."""
+
+        def __init__(self):
+            self.sleeps = []
+            self._lock = threading.Lock()
+
+        def time(self):
+            # Yield here, between a thread reading the budget and claiming a slot, which is
+            # exactly where an unlocked pacer lets two threads take the same one.
+            import time
+
+            time.sleep(0.005)
+            return 0.0
+
+        def sleep(self, seconds):
+            import time
+
+            time.sleep(0.005)  # a real sleep yields, as the real one does
+            with self._lock:
+                self.sleeps.append(seconds)
+
+    clock = RecordingClock()
+    c = client(FakeTransport(ok(0.1)), clock, requests_per_minute=1200)
+
+    threads = [threading.Thread(target=ask, args=(c,)) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    # Five threads at 50 ms a call must be given five different slots, 0, 50, 100, 150, 200 ms
+    # from now, never the same one twice.
+    assert sorted(round(w, 3) for w in clock.sleeps) == [0.05, 0.1, 0.15, 0.2]
+
+
+def test_retries_are_counted_by_what_caused_them():
+    transport = FakeTransport((429, {}), (429, {}), (529, {}), ConnectionResetError("x"), ok(0.2))
+    c = client(transport)
+
+    ask(c)
+
+    assert c.retries == {"429": 2, "529": 1, "connection": 1}
+
+
 # --- through the runner ----------------------------------------------------------------------
 
 

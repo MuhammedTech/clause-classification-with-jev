@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -127,17 +128,51 @@ def _close_dangling_line(path: Path) -> None:
         handle.write("\n")
 
 
+def _row(clause: Clause, rule: Rule, model_version: str, p_yes: float) -> str:
+    return (
+        json.dumps(
+            {
+                "doc_id": clause.doc_id,
+                "clause_start": clause.start,
+                "clause_end": clause.end,
+                "rule_id": rule.id,
+                "question_type": QUESTION_TYPE,
+                "model_version": model_version,
+                "prompt_fingerprint": prompt_fingerprint(clause.parent_line, clause.text),
+                "question": rule.detection_question,
+                "p_yes": p_yes,
+            },
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
+
+
 def run_pairs(
     clauses: Sequence[Clause],
     rules: Iterable[Rule],
     client: JevClient,
     cache_path: Path,
+    workers: int = 1,
 ) -> tuple[PYesTable, RunStats]:
     """Ask Jev about every (Clause, Rule) Pair, skipping any already in the cache.
 
-    Returns the P(yes) table — keyed by Rule id, then by (document, Clause span) — and the run's
+    Returns the P(yes) table, keyed by Rule id then by (document, Clause span), and the run's
     counts and wall clock.
+
+    `workers` is how many calls may be in flight at once. It changes how fast the run goes and
+    nothing else: the answers are the same, and so is the set of cache rows, though their order may
+    differ. The client must be safe to call from several threads when `workers` is above one. Only
+    this function's own thread ever writes the cache, so rows never interleave.
+
+    The window is bounded: at most `workers` calls are outstanding, and a new one is submitted only
+    when another returns. So a failure (or Ctrl-C) never leaves the rest of the corpus queued behind
+    it, and the calls already in flight are waited for and **kept**, because they were paid for.
+    The first failure is re-raised once they have landed. Because answers are flushed as they
+    arrive, the next run asks only what is still missing.
     """
+    if workers < 1:
+        raise ValueError(f"workers must be at least 1, got {workers}")
     rules = list(rules)
     cache_path = Path(cache_path)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -146,52 +181,78 @@ def run_pairs(
     model_version = client.model_version
     _close_dangling_line(cache_path)
 
-    table: PYesTable = {rule.id: {} for rule in rules}
-    calls_made = 0
+    # Everything this run needs, in order, and the subset that is not in the cache. A Pair that
+    # appears twice is asked once: concurrent workers would otherwise race to ask it twice.
+    needed: list[tuple[str, tuple[str, str], PairKey]] = []
+    to_ask: dict[PairKey, tuple[Clause, Rule]] = {}
     cache_hits = 0
+    for clause in clauses:
+        for rule in rules:
+            key = _key(clause, rule, model_version)
+            needed.append((rule.id, clause.key, key))
+            if key in cached or key in to_ask:
+                cache_hits += 1
+            else:
+                to_ask[key] = (clause, rule)
+
     started = time.monotonic()
+    calls_made = 0
+    first_error: BaseException | None = None
+    pending = iter(to_ask.items())
+    in_flight: dict[Future, tuple[PairKey, Clause, Rule]] = {}
 
     with cache_path.open("a", encoding="utf-8") as handle:
-        for clause in clauses:
-            for rule in rules:
-                key = _key(clause, rule, model_version)
-                if key in cached:
-                    cache_hits += 1
-                    table[rule.id][clause.key] = cached[key]
-                    continue
 
-                p_yes = client.p_yes(
-                    clause_text=clause.text,
-                    parent_line=clause.parent_line,
-                    question=rule.detection_question,
-                    question_type=QUESTION_TYPE,
-                )
-                calls_made += 1
+        def settle(future: Future) -> None:
+            """Record one finished call: keep its answer, or remember the first failure."""
+            nonlocal calls_made, first_error
+            key, clause, rule = in_flight.pop(future)
+            try:
+                p_yes = future.result()
+            except BaseException as error:  # noqa: BLE001 - re-raised below, after the drain
+                first_error = first_error or error
+                return
+            handle.write(_row(clause, rule, model_version, p_yes))
+            # Flushed per answer so an interruption loses at most the calls still in flight.
+            handle.flush()
+            cached[key] = p_yes
+            calls_made += 1
 
-                handle.write(
-                    json.dumps(
-                        {
-                            "doc_id": clause.doc_id,
-                            "clause_start": clause.start,
-                            "clause_end": clause.end,
-                            "rule_id": rule.id,
-                            "question_type": QUESTION_TYPE,
-                            "model_version": model_version,
-                            "prompt_fingerprint": prompt_fingerprint(
-                                clause.parent_line, clause.text
-                            ),
-                            "question": rule.detection_question,
-                            "p_yes": p_yes,
-                        },
-                        ensure_ascii=False,
+        pool = ThreadPoolExecutor(max_workers=workers)
+        try:
+            while True:
+                while first_error is None and len(in_flight) < workers:
+                    item = next(pending, None)
+                    if item is None:
+                        break
+                    key, (clause, rule) = item
+                    future = pool.submit(
+                        client.p_yes,
+                        clause_text=clause.text,
+                        parent_line=clause.parent_line,
+                        question=rule.detection_question,
+                        question_type=QUESTION_TYPE,
                     )
-                    + "\n"
-                )
-                # Flushed per call so an interruption loses at most the Pair in flight.
-                handle.flush()
+                    in_flight[future] = (key, clause, rule)
+                if not in_flight:
+                    break
+                done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
+                for future in done:
+                    settle(future)
+        finally:
+            # Reached on a failure, on Ctrl-C and on success alike: collect every call still in
+            # flight, so what was paid for is written before anything is raised.
+            for future in list(in_flight):
+                wait([future])
+                settle(future)
+            pool.shutdown(wait=True)
 
-                cached[key] = p_yes
-                table[rule.id][clause.key] = p_yes
+    if first_error is not None:
+        raise first_error
+
+    table: PYesTable = {rule.id: {} for rule in rules}
+    for rule_id, clause_key, key in needed:
+        table[rule_id][clause_key] = cached[key]
 
     stats = RunStats(
         pairs=len(clauses) * len(rules),

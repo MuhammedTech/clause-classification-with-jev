@@ -65,7 +65,7 @@ in `config.py`:
 every cache row `jev-1.14.0`, no stub label in the report. A second run made 0 calls, including
 `--from-cache` with no key set. Interrupt-and-resume is covered by a test through the runner.
 
-**For ticket 09: the runner is serial.** At about 0.4s a call, 22,700 calls is roughly 2.5 hours, not
+**For ticket 09: the runner was serial. Fixed in ticket 11, which measured about 20 minutes.** The note as first written: At about 0.4s a call, 22,700 calls is roughly 2.5 hours, not
 the "about 20 minutes" the rate limit alone would give. Reaching 20 minutes needs concurrent calls
 in the runner (about 20 in flight), which this ticket did not add; it is a runner change, not a
 client one. The cost is unchanged (roughly $0.27). Raised for the user to decide before the real run.

@@ -49,6 +49,15 @@ def test_a_second_run_makes_zero_client_calls(tmp_path):
     assert rerun.stats.cache_hits == rerun.stats.pairs
 
 
+def test_a_concurrent_run_scores_exactly_what_a_serial_run_scores(tmp_path):
+    serial = run(client=StubJevClient(), out_dir=tmp_path / "serial")
+    parallel = run(client=StubJevClient(), out_dir=tmp_path / "parallel", workers=8)
+
+    assert parallel.p_yes == serial.p_yes
+    assert parallel.metrics == serial.metrics
+    assert parallel.stats.calls_made == serial.stats.calls_made
+
+
 def test_the_report_rebuilds_from_the_cache_with_identical_figures(tmp_path):
     first = run(client=StubJevClient(), out_dir=tmp_path)
     rerun = run(client=StubJevClient(), out_dir=tmp_path)

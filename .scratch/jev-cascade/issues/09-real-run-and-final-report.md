@@ -41,7 +41,7 @@ fan-out (ADR-0006) and approved the paid run. The report is rebuilt from the cac
 - 22,722 Pairs (3,246 Clauses by 7 Rules) in **3,246 calls**, 179 s, none retried. Every cache row is
   tagged `jev-1.14.0` and `binary`; P(yes) runs from 0.01 to 0.99.
 - Jev reported **2,019,752 input tokens**, 31.5% of the 6,419,682 estimated: the shared Clause is billed
-  about once a call. $0.085 at the published price. Check it against the TypeSafe invoice.
+  about once a call. $0.085 at the published price. Not checked against the invoice (set aside, see below).
 - The report opens with "From the stub to the real Jev", states the model version, question type,
   heading setting, run date and the time Jev was asking, and says it is reproducible from the cache,
   not from scratch. The word stub appears only in that section.
@@ -103,14 +103,16 @@ lost, out of 3,246 Clauses and 429 Highlights.
 
 **Open, none of it blocking this ticket**
 
-- Fan-out against one question a call is **unmeasured**. Cheapest test: `--rule R6` into a separate
-  `--out` directory (the caches must not be mixed, ADR-0006), then compare P(yes) per Pair.
-- The TypeSafe invoice for 2026-11-13 has not been compared with the measured $0.085.
-- The expensive model was never run, so "Escalated" is not shown to find anything, and the dollar savings
-  are token estimates (characters over 4, assumed output length). Sample some Escalated and some Binned
-  Clauses through it.
 - Only 53 license agreements; nothing says it holds on other CUAD contract types.
 - A lawyer's look at about 30 false alarms and 30 misses would say how much of the error is label noise.
 - R6 (Minimum Commitment) recall is 60% at 0.5 and R7 (Change Of Control) 75%; the other five are
   92 to 94%. Decide whether to keep R6 and R7 in the Rulebook or ask them differently.
 - The report does not yet print the joint Cutoff trade-off above.
+
+**Set aside by the user on 2026-11-13, not to be chased.** Still true, so the report and the explainer
+page keep saying so, but nobody is to act on them:
+
+- Whether the fan-out changes the probabilities against one question a call (unmeasured).
+- Comparing the measured $0.085 with the TypeSafe invoice.
+- Running the expensive model: "Escalated" is not shown to find anything, and the dollar savings stay
+  token estimates.

@@ -4,6 +4,20 @@ Measures how much CUAD license-agreement text Jev, a cheap decision model, can *
 before an expensive model ever reads it — and what that costs in provisions nobody would look at,
 judged against lawyer highlights.
 
+## Results
+
+**Read this first: [Jev Cascade Results](https://claude.ai/artifact/3Cg59wmFZPDAt4cSS8P5xX)**, a plain-language
+walkthrough of the real run with worked examples. If the link does not open for you, ask the owner to
+share it; the same numbers are in the report that `--from-cache` rebuilds (see Running).
+
+The real run was all 53 license agreements against seven Rules (3,246 Clauses, `jev-1.14.0`):
+
+- **77.3% of Clauses are Fully Binned** at the 0.5 Cutoff (2,510 of 3,246), so the expensive model never reads them.
+- **The price: 44 of 429 lawyer-marked provisions (10.3%) are lost** inside those Clauses. Quote the two numbers together.
+- **Estimated saving against Claude Sonnet 5.5: about $24 of $26.45 (91.4%)**, from token counts at list prices.
+  The expensive model was never run, so this is an order of magnitude, not an invoice. Jev's own cost was $0.085 as it reported.
+- Five Rules catch 92 to 94% of lawyer-marked Clauses; Minimum Commitment catches 60% and Change Of Control 75%.
+
 Start with `GLOSSARY.md` for the vocabulary, `.scratch/jev-cascade/spec.md` for the method, and
 `docs/cuad-ground-truth.md` for what has already been measured about the data.
 

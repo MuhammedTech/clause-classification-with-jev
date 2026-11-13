@@ -11,3 +11,11 @@ __pycache__/
 # Generated run output: the cache and the report are rebuildable
 out/
 *.jsonl
+
+# Local-only files: per-machine Claude Code state, other worktrees, macOS and editor leftovers
+.claude/settings.local.json
+.claude/worktrees/
+.env.*
+.DS_Store
+.idea/
+.vscode/

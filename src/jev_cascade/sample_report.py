@@ -31,13 +31,19 @@ class StudyInputs:
     chosen_type: str
     #: The chosen type asked with the heading taken out.
     heading_off: ArmResult
-    keep_heading: bool
+    #: The heading setting chosen: True keeps the heading in Jev's context.
+    heading_context: bool
     #: Mean separation minus `binary`'s, with a 95% interval, for each type but `binary`.
     type_differences: Mapping[str, Difference]
     #: Heading off minus heading on, for the chosen type.
     heading_difference: Difference
     model_version: str
     is_stub: bool
+    #: Documents the sample was drawn from.
+    documents: int
+    #: Over the whole corpus: Clauses, how many have a Parent Line, and of those how many are a
+    #: standalone heading, introduce a list (end in a colon), or are other longer lines.
+    parent_lines: Mapping[str, int]
     #: Jev answers behind the report, read from the cache so a rebuild states the same figure.
     answers: int
 
@@ -94,6 +100,43 @@ def _ceiling_note(inputs: StudyInputs) -> list[str]:
     ]
 
 
+def _most_from_one_document(sample: SampleSet) -> int:
+    most = 0
+    for clauses in sample.by_rule.values():
+        counts: dict[str, int] = {}
+        for clause in clauses:
+            counts[clause.doc_id] = counts.get(clause.doc_id, 0) + 1
+        most = max(most, max(counts.values(), default=0))
+    return most
+
+
+def _not_held(inputs: StudyInputs) -> int:
+    return sum(r.not_held for r in inputs.type_results[0].by_rule.values() if r is not None)
+
+
+def _near_miss_share(inputs: StudyInputs) -> float:
+    not_held = _not_held(inputs)
+    return sum(inputs.sample.near_misses.values()) / not_held if not_held else 0.0
+
+
+def _heading_scope(kinds: Mapping[str, int]) -> list[str]:
+    """What 'the heading taken out' covers, measured over the corpus, so a reader is not misled."""
+    with_parent = kinds["with_parent"]
+    if not with_parent:
+        return []
+    return [
+        f"Of the corpus's {kinds['clauses']} Clauses, {with_parent} have a Parent Line. "
+        f"**{kinds['heading']}** of those are a standalone section heading, and that is all the "
+        f"heading-off arm takes out. {kinds['list_intro']} introduce a list and {kinds['other']} are "
+        "other longer lines, many a heading with its body text on the same line "
+        "('14. REPRESENTATIONS AND WARRANTIES.  (a) Each party...'); those stay in both arms. So "
+        "'heading off' removes the heading for "
+        f"{kinds['heading'] / with_parent:.0%} of Parent Lines, and the comparison understates what "
+        "removing every heading would do.",
+        "",
+    ]
+
+
 def render_study(inputs: StudyInputs) -> str:
     """The comparison as Markdown."""
     sample = inputs.sample
@@ -121,19 +164,28 @@ def render_study(inputs: StudyInputs) -> str:
         f"Rules, unless it beats `binary` by less than {MARGIN:.2f}, in which case `binary` stands.",
         f"- Then ask the chosen type with the heading taken out. The heading comes out only if that "
         f"beats heading-on by at least {MARGIN:.2f}; otherwise it stays.",
-        "- A 95% paired bootstrap interval is printed beside each difference, so a reader can see "
-        "whether it is inside the noise. It does not change the rule.",
+        "- A 95% paired bootstrap interval, resampling documents, is printed beside each "
+        "difference, so a reader can see whether it is inside the noise. It does not change the "
+        "rule.",
         "- **Binned Share and Precision are not read from this sample.** It is enriched with held "
         "Clauses and near misses, so its base rate is wrong and those figures do not transfer.",
         "",
         "## The sample",
         "",
         f"Seed {SAMPLE_SEED}. Up to {HELD_PER_RULE} held Clauses and {NOT_HELD_PER_RULE} not-held "
-        f"Clauses per Rule, at most {PER_DOCUMENT_CAP} from any one document, over all 53 "
-        f"documents. {NEAR_MISS_SHARE:.0%} of the not-held Clauses are near misses: they sit under "
-        "the same section heading as a held Clause. Each Clause is asked only its own Rule's "
-        "question, so one arm is "
-        f"{sample.pairs} Pairs.",
+        f"Clauses per Rule, drawn from all {inputs.documents} documents. A **held** Clause holds at "
+        "least one Highlight of the Rule; a **not-held** Clause holds none, whether or not its "
+        "document is a Certified Negative.",
+        "",
+        f"The cap is {PER_DOCUMENT_CAP} Clauses from any one document for each of the three draws "
+        f"(held, near miss, other not-held), so up to three times that to one Rule; the most any "
+        f"one Rule took from one document is {_most_from_one_document(sample)}.",
+        "",
+        f"The aim was {NEAR_MISS_SHARE:.0%} near misses among the not-held Clauses: ones under the "
+        f"same section heading as a held Clause. **The sample got {_near_miss_share(inputs):.0%}** "
+        f"({sum(sample.near_misses.values())} of {_not_held(inputs)}), because few not-held Clauses "
+        "share a heading with a held one; the rest are drawn at random. Each Clause is asked only "
+        f"its own Rule's question, so one arm is {sample.pairs} Pairs.",
         "",
         "| Rule | Held | Not held | Near misses | Heading-affected Clauses |",
         "| --- | --- | --- | --- | --- |",
@@ -149,7 +201,9 @@ def render_study(inputs: StudyInputs) -> str:
     lines += [
         "",
         "A heading-affected Clause is one whose Parent Line is a section heading. It is the only "
-        "kind the heading setting can change; the others are the same prompt in both arms.",
+        "kind the heading setting can change; the others are the same prompt in both arms. The "
+        "column counts Clauses within a Rule, so a Clause drawn for two Rules is counted in both, "
+        "and the column's sum is Pairs.",
         "",
         "## Question type, heading shown",
         "",
@@ -170,7 +224,9 @@ def render_study(inputs: StudyInputs) -> str:
         "## Heading context",
         "",
         f"The chosen type, `{inputs.chosen_type}`, with the section heading shown against taken out. "
-        "A lead-in such as 'Licensee shall:' is shown in both.",
+        "A Parent Line that introduces a list, such as 'Licensee shall:', is shown in both.",
+        "",
+        *_heading_scope(inputs.parent_lines),
         "",
     ]
     on = next(r for r in inputs.type_results if r.arm.question_type == inputs.chosen_type)
@@ -180,7 +236,7 @@ def render_study(inputs: StudyInputs) -> str:
         f"- Heading off minus heading on, mean separation: {_interval(inputs.heading_difference)}: "
         f"{_verdict(inputs.heading_difference)}.",
         "",
-        f"**Heading context: {'on' if inputs.keep_heading else 'off'}**.",
+        f"**Heading context: {'on' if inputs.heading_context else 'off'}**.",
         "",
         "## What this does not show",
         "",

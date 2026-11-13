@@ -194,7 +194,7 @@ class _Piece:
     start: int
     end: int
     parent_line: str
-    #: Whether the Parent Line is a section heading rather than a lead-in. See `Clause`.
+    #: Whether the Parent Line is a standalone section heading. See `Clause`.
     parent_is_heading: bool = False
 
 
@@ -230,7 +230,7 @@ def _parent_lines(regions: list[_Region]) -> list[tuple[str, bool]]:
 
     A Parent Line is a heading when the region it came from has the shape of one (a single short
     label after its marker, no colon), the same test `_is_heading_shape` makes for merging. A line
-    ending in a colon, or a longer one, is a lead-in.
+    ending in a colon introduces a list, and a longer one carries body text, so neither is one.
 
     Walks the regions with a stack of the open items. Entering a region closes every open item at
     its depth or deeper, so what is left on top is the nearest shallower item, which is the line

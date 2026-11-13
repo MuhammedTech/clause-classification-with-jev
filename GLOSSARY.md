@@ -98,9 +98,30 @@ chose `binary`.
 _Avoid_: prompt style, mode, format
 
 **Heading context**:
-Whether Jev is shown a section heading as the Parent Line. A lead-in line such as "Licensee shall:" is
-always shown; only a heading is taken out when this is off. Ticket 08 left it on.
+Whether Jev is shown a section heading as the Parent Line. Only a **standalone** heading (a single
+short label after its marker, no colon) is taken out when this is off. A Parent Line that introduces a
+list ("Licensee shall:") and a longer line with body text on it are shown either way. Over the corpus
+that is 459 of the 1,269 Parent Lines. Ticket 08 left it on.
 _Avoid_: header, title context
+
+**Held**:
+Said of a Clause in the ticket 08 sample tables: it holds at least one Highlight of the Rule. **Not
+held** means it holds none, whether or not its document is a Certified Negative.
+_Avoid_: positive, relevant
+
+**Near miss**:
+A not-held Clause that sits under the same section heading as a held Clause. Ticket 08 draws them on
+purpose, because plain not-held Clauses are mostly boilerplate that every question type scores near
+zero, and because they are where a heading can mislead Jev.
+_Avoid_: hard negative, decoy
+
+**Heading-affected Clause**:
+A Clause whose Parent Line is a standalone section heading: the only kind the heading setting can
+change.
+
+**Arm**:
+One way of asking in the ticket 08 sample: a question type and a heading setting.
+_Avoid_: variant, condition
 
 **Separation**:
 For one Rule, the chance that a Clause holding a Highlight scores a higher P(yes) than one that does

@@ -311,7 +311,7 @@ class Separation:
     with a tie counting half: 1.0 ranks every held Clause above every not-held one, 0.5 is no better
     than a coin. It needs no Cutoff, and it does not depend on the base rate, which is why ticket 08
     can use it on a sample enriched with held Clauses where Binned Share and Precision would not
-    transfer. It is the area under the ROC curve.
+    transfer.
     """
 
     held: int

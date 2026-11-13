@@ -1,6 +1,6 @@
 """Ticket 08's command: ask a small sample three ways, then with and without the heading.
 
-    jev-cascade-sample --jev real          # needs JEV_API_KEY; about 1,700 calls
+    jev-cascade-sample --jev real          # needs JEV_API_KEY; at most 1,680 calls (1,357 on the real run)
     jev-cascade-sample --jev real --from-cache   # rebuild the report with no key and no calls
 
 The plan (Pairs per arm, the total, the decision rules) is printed before the first call, so the
@@ -25,6 +25,7 @@ from .sample_study import (
     HELD_PER_RULE,
     MARGIN,
     NOT_HELD_PER_RULE,
+    DEFAULT_TYPE,
     QUESTION_TYPES,
     Arm,
     bootstrap_difference,
@@ -82,23 +83,41 @@ def run_study(
     heading_off = run_arm(Arm(chosen.question_type, False), sample, highlights, client, cache, workers)
     announce(f"  {heading_off.arm.label}: mean separation {heading_off.mean_separation:.3f}")
 
-    base = next(r for r in type_results if r.arm.question_type == "binary")
+    base = next(r for r in type_results if r.arm.question_type == DEFAULT_TYPE)
     return StudyInputs(
         sample=sample,
         type_results=type_results,
         chosen_type=chosen.question_type,
         heading_off=heading_off,
-        keep_heading=choose_heading(chosen_result, heading_off),
+        heading_context=choose_heading(chosen_result, heading_off),
         type_differences={
             r.arm.question_type: bootstrap_difference(base, r, sample, highlights)
             for r in type_results
-            if r.arm.question_type != "binary"
+            if r.arm.question_type != DEFAULT_TYPE
         },
         heading_difference=bootstrap_difference(chosen_result, heading_off, sample, highlights),
         model_version=client.model_version,
         is_stub=client.is_stub,
+        documents=len(documents),
+        parent_lines=_parent_line_kinds(clauses),
         answers=len(read_cache(cache)),
     )
+
+
+def _parent_line_kinds(clauses) -> dict[str, int]:
+    """How many Parent Lines are a standalone heading, introduce a list, or are something longer."""
+    with_parent = [c for c in clauses if c.parent_line]
+    heading = sum(1 for c in with_parent if c.parent_is_heading)
+    list_intro = sum(
+        1 for c in with_parent if not c.parent_is_heading and c.parent_line.rstrip().endswith(":")
+    )
+    return {
+        "clauses": len(clauses),
+        "with_parent": len(with_parent),
+        "heading": heading,
+        "list_intro": list_intro,
+        "other": len(with_parent) - heading - list_intro,
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -145,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(render_study(inputs), encoding="utf-8")
     print(f"Wrote {args.report}")
-    print(f"Chosen: {inputs.chosen_type}, heading {'on' if inputs.keep_heading else 'off'}")
+    print(f"Chosen: {inputs.chosen_type}, heading {'on' if inputs.heading_context else 'off'}")
     return 0
 
 

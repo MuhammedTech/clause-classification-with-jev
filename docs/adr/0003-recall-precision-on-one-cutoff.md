@@ -83,3 +83,11 @@ Reporting the curve removes all of that, because nothing is fitted. Cross-fittin
   destroyed, so demanding confidence before escalating loses provisions wholesale.
 - **Per-clause gold labels with overlap thresholds**, as ADR-0002 rejected them. Still rejected. The
   one-character rule needs no threshold and the thresholds depended on the splitter.
+
+## Amendment, 2026-11-13: one seeded exception, outside grading
+
+Ticket 08's pre-run sample draws Clauses with a seeded random generator and bootstraps an interval
+around each difference. That is the only randomness in the code, it lives in `sample_study.py`, and it
+has nothing to do with how a run is graded: nothing is fitted, so nothing is held out, and the
+Evaluator, runner and report are unchanged. `tests/test_no_tuning.py` exempts that one module by name
+and checks that no grading module imports it.

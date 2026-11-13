@@ -48,8 +48,10 @@ def cuad_is_available(directory: Path | None = None) -> bool:
 #: `choice2`, so neither beat `binary` by the 0.02 margin fixed in advance and `binary` stands.
 QUESTION_TYPE = "binary"
 
-#: Whether Jev is shown a section heading as the Parent Line. A lead-in line such as "Licensee
-#: shall:" is always shown; only a heading is taken out when this is off (ticket 08).
+#: Whether Jev is shown a section heading as the Parent Line. A Parent Line that introduces a list,
+#: such as "Licensee shall:", is always shown; only a standalone heading is taken out when this is
+#: off (ticket 08). That is 459 of the 1,269 Clauses that have a Parent Line: 433 introduce a list
+#: and 377 are longer lines with body text on them, which stay in both settings.
 #: Set from the same sample: taking the heading out changed mean separation by +0.000 (95%
 #: interval -0.002 to +0.002), well under the 0.02 it needed to come out, so it stays on. The sample
 #: is near its ceiling and holds only 40 near misses, so this is "no difference detectable", which

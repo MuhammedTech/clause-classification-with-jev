@@ -8,12 +8,16 @@ Fixed before any real call. Both choices are made on **separation per Rule only*
 
 - Compare the three types with the heading shown. Pick the highest mean separation across Rules, unless it beats `binary` by less than 0.02, in which case `binary` stands.
 - Then ask the chosen type with the heading taken out. The heading comes out only if that beats heading-on by at least 0.02; otherwise it stays.
-- A 95% paired bootstrap interval is printed beside each difference, so a reader can see whether it is inside the noise. It does not change the rule.
+- A 95% paired bootstrap interval, resampling documents, is printed beside each difference, so a reader can see whether it is inside the noise. It does not change the rule.
 - **Binned Share and Precision are not read from this sample.** It is enriched with held Clauses and near misses, so its base rate is wrong and those figures do not transfer.
 
 ## The sample
 
-Seed 20261113. Up to 20 held Clauses and 40 not-held Clauses per Rule, at most 4 from any one document, over all 53 documents. 50% of the not-held Clauses are near misses: they sit under the same section heading as a held Clause. Each Clause is asked only its own Rule's question, so one arm is 420 Pairs.
+Seed 20261113. Up to 20 held Clauses and 40 not-held Clauses per Rule, drawn from all 53 documents. A **held** Clause holds at least one Highlight of the Rule; a **not-held** Clause holds none, whether or not its document is a Certified Negative.
+
+The cap is 4 Clauses from any one document for each of the three draws (held, near miss, other not-held), so up to three times that to one Rule; the most any one Rule took from one document is 11.
+
+The aim was 50% near misses among the not-held Clauses: ones under the same section heading as a held Clause. **The sample got 14%** (40 of 280), because few not-held Clauses share a heading with a held one; the rest are drawn at random. Each Clause is asked only its own Rule's question, so one arm is 420 Pairs.
 
 | Rule | Held | Not held | Near misses | Heading-affected Clauses |
 | --- | --- | --- | --- | --- |
@@ -25,7 +29,7 @@ Seed 20261113. Up to 20 held Clauses and 40 not-held Clauses per Rule, at most 4
 | R7 | 20 | 40 | 8 | 17 |
 | R8 | 20 | 40 | 4 | 14 |
 
-A heading-affected Clause is one whose Parent Line is a section heading. It is the only kind the heading setting can change; the others are the same prompt in both arms.
+A heading-affected Clause is one whose Parent Line is a section heading. It is the only kind the heading setting can change; the others are the same prompt in both arms. The column counts Clauses within a Rule, so a Clause drawn for two Rules is counted in both, and the column's sum is Pairs.
 
 ## Question type, heading shown
 
@@ -42,14 +46,17 @@ Separation, with held/not-held Clause counts in brackets.
 | R8 | 0.993 (20/40) | 0.982 (20/40) | 0.982 (20/40) |
 | **Mean** | **0.980** | **0.973** | **0.973** |
 
-- `score2` minus `binary`, mean separation: -0.007 (95% interval -0.016 to +0.001): the interval spans zero, so the sample cannot tell the two apart.
-- `choice2` minus `binary`, mean separation: -0.007 (95% interval -0.016 to -0.000): the interval is below zero.
+- `score2` minus `binary`, mean separation: -0.007 (95% interval -0.014 to -0.000): the interval is below zero.
+- `choice2` minus `binary`, mean separation: -0.007 (95% interval -0.015 to -0.001): the interval is below zero.
 
 **Chosen question type: binary**, for every Rule.
 
 ## Heading context
 
-The chosen type, `binary`, with the section heading shown against taken out. A lead-in such as 'Licensee shall:' is shown in both.
+The chosen type, `binary`, with the section heading shown against taken out. A Parent Line that introduces a list, such as 'Licensee shall:', is shown in both.
+
+Of the corpus's 3246 Clauses, 1269 have a Parent Line. **459** of those are a standalone section heading, and that is all the heading-off arm takes out. 433 introduce a list and 377 are other longer lines, many a heading with its body text on the same line ('14. REPRESENTATIONS AND WARRANTIES.  (a) Each party...'); those stay in both arms. So 'heading off' removes the heading for 36% of Parent Lines, and the comparison understates what removing every heading would do.
+
 
 | Rule | binary, heading on | binary, heading off |
 | --- | --- | --- |

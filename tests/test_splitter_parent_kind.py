@@ -1,7 +1,8 @@
-"""Seam: the Splitter says whether a Clause's Parent Line is a section heading or a lead-in.
+"""Seam: the Splitter says whether a Clause's Parent Line is a section heading or not.
 
 Ticket 08 tests the heading in and out of Jev's context. That has to blank the heading and leave a
-lead-in such as "Licensee shall:" alone, so the Splitter records which one a Parent Line is.
+Parent Line that introduces a list, such as "Licensee shall:", alone, so the Splitter records
+which one a Parent Line is.
 """
 
 from jev_cascade.splitter import split_document

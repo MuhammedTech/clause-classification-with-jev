@@ -29,11 +29,13 @@ from typing import Mapping, Sequence
 from .domain import Clause, Highlight, holds, without_heading
 from .evaluator import ClauseKey, Separation, separation
 from .jev import JevClient
-from .rulebook import Rule
+from .rulebook import Rule, rule
 from .runner import run_pairs
 
 #: Held Clauses drawn per Rule, not-held Clauses drawn per Rule, and the most Clauses one document
-#: may supply to either group so one contract cannot be the sample.
+#: may supply to **each** of the three draws (held, near-miss, other not-held), so one contract
+#: cannot be the sample. The cap applies to each draw separately, so a document can supply up to
+#: three times this to one Rule; the report prints the realised maximum.
 HELD_PER_RULE = 20
 NOT_HELD_PER_RULE = 40
 PER_DOCUMENT_CAP = 4
@@ -146,8 +148,6 @@ class ArmResult:
     arm: Arm
     by_rule: Mapping[str, Separation | None]
     p_yes: Mapping[str, Mapping[ClauseKey, float]]
-    #: Jev calls this arm made. Answers already cached cost none.
-    calls_made: int = 0
 
     @property
     def mean_separation(self) -> float:
@@ -172,10 +172,9 @@ def run_arm(
     rules_by_id = {r.id: r for r in _rules_for(sample)}
     tables: dict[str, Mapping[ClauseKey, float]] = {}
     separations: dict[str, Separation | None] = {}
-    calls = 0
     for rule_id, clauses in sample.by_rule.items():
         shown = clauses if arm.heading_context else tuple(without_heading(clauses))
-        table, stats = run_pairs(
+        table, _ = run_pairs(
             shown,
             [rules_by_id[rule_id]],
             client,
@@ -183,15 +182,12 @@ def run_arm(
             workers=workers,
             question_type=arm.question_type,
         )
-        calls += stats.calls_made
         tables[rule_id] = table[rule_id]
         separations[rule_id] = separation(shown, highlights_by_rule.get(rule_id, ()), table[rule_id])
-    return ArmResult(arm=arm, by_rule=separations, p_yes=tables, calls_made=calls)
+    return ArmResult(arm=arm, by_rule=separations, p_yes=tables)
 
 
 def _rules_for(sample: SampleSet) -> list[Rule]:
-    from .rulebook import rule
-
     return [rule(rule_id) for rule_id in sample.by_rule]
 
 
@@ -228,16 +224,32 @@ def bootstrap_difference(
 ) -> tuple[float, float, float]:
     """Mean separation of `b` minus `a`, and a 95% paired bootstrap interval around it.
 
-    Each draw resamples a Rule's Clauses with replacement, the same resample for both arms, so the
-    interval reflects the Clauses drawn rather than which arm was luckier. A draw in which a Rule
-    loses all its held or all its not-held Clauses leaves that Rule out for both arms.
+    Each draw resamples a Rule's **documents** with replacement and takes all the Clauses the
+    sample holds from each, the same resample for both arms. Clauses from one contract are alike,
+    so resampling Clauses singly would make the interval too narrow. A draw in which a Rule loses
+    all its held or all its not-held Clauses leaves that Rule out for both arms.
+
+    The interval is the 2.5th and 97.5th percentile of the draws and is not adjusted to contain the
+    point estimate.
     """
     rng = random.Random(seed)
+    by_document: dict[str, dict[str, list[Clause]]] = {}
+    for rule_id, clauses in sample.by_rule.items():
+        groups: dict[str, list[Clause]] = {}
+        for clause in clauses:
+            groups.setdefault(clause.doc_id, []).append(clause)
+        by_document[rule_id] = groups
+
     differences: list[float] = []
     for _ in range(draws):
         gaps: list[float] = []
-        for rule_id, clauses in sample.by_rule.items():
-            resampled = [clauses[rng.randrange(len(clauses))] for _ in clauses]
+        for rule_id, groups in by_document.items():
+            doc_ids = list(groups)
+            resampled = [
+                clause
+                for doc_id in (doc_ids[rng.randrange(len(doc_ids))] for _ in doc_ids)
+                for clause in groups[doc_id]
+            ]
             marked = highlights_by_rule.get(rule_id, ())
             left = separation(resampled, marked, a.p_yes[rule_id])
             right = separation(resampled, marked, b.p_yes[rule_id])
@@ -251,6 +263,4 @@ def bootstrap_difference(
         return point, math.nan, math.nan
     low = differences[int(0.025 * (len(differences) - 1))]
     high = differences[math.ceil(0.975 * (len(differences) - 1))]
-    # The point estimate is on the full sample, the bounds on resamples; widen the interval to
-    # include it rather than print a point outside its own interval.
-    return point, min(low, point), max(high, point)
+    return point, low, high

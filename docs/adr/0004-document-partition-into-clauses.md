@@ -107,8 +107,17 @@ heading **stays on**.
 
 - **"Heading" means a section heading, not every Parent Line.** The Splitter now records whether a
   Parent Line is a heading (a single short label after its marker, no colon), and taking the heading
-  out leaves a lead-in such as `10.1 Licensee shall:` in place. Blanking every Parent Line would have
-  tested something else, and a list item read without its lead-in is a different question.
+  out leaves a Parent Line that introduces a list, such as `10.1 Licensee shall:`, in place.
+  Blanking every Parent Line would have tested something else, and a list item read without its
+  introduction is a different question.
+- **"Heading" is only the standalone ones, 36% of Parent Lines.** Of the corpus's 3,246 Clauses, 1,269
+  have a Parent Line. 459 are standalone headings, 433 introduce a list, and 377 are longer lines,
+  often a heading with its body text on the same line (`14. REPRESENTATIONS AND WARRANTIES.  (a)
+  Each party...`) because some documents' pages collapse to one line. Those 377 are shown in both
+  arms. So "heading off" removed the heading for about a third of Parent Lines, and the result
+  understates what removing every heading would do. Reading the heading out of those lines needs the
+  cleverer marker detection this ADR declines, so it was not built; it is the open follow-up if
+  ticket 09 shows a heading problem.
 - **The sample could not discriminate.** Every Rule scored at least 0.938 in every arm, and the sample
   holds only 40 near misses in all. "No difference" means none was detectable here. The harm the ADR
   worried about, a section label stamped on unrelated Clauses, would show over the corpus's many

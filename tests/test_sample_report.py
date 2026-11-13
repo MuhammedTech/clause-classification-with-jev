@@ -30,11 +30,13 @@ def inputs(**overrides):
         ],
         chosen_type="score2",
         heading_off=arm_result("score2", False, {"R1": 0.88, "R2": 0.85}),
-        keep_heading=True,
+        heading_context=True,
         type_differences={"score2": (0.125, 0.05, 0.2), "choice2": (-0.125, -0.2, -0.05)},
         heading_difference=(-0.01, -0.03, 0.01),
         model_version="jev-1.14.0",
         is_stub=False,
+        documents=53,
+        parent_lines={"clauses": 3246, "with_parent": 1269, "heading": 459, "list_intro": 433, "other": 377},
         answers=1357,
     )
     args.update(overrides)
@@ -58,7 +60,7 @@ def test_the_report_compares_heading_on_against_off_and_states_the_choice():
     assert "**Heading context: on**" in markdown
     # One Clause of the sample has a heading Parent Line: the only one the heading can change.
     assert "heading-affected" in markdown.lower()
-    keep_off = render_study(inputs(keep_heading=False))
+    keep_off = render_study(inputs(heading_context=False))
     assert "**Heading context: off**" in keep_off
 
 
@@ -93,3 +95,20 @@ def test_when_every_arm_scores_near_the_ceiling_the_report_says_the_sample_canno
 
     # With room to discriminate, the claim is not made.
     assert "near its ceiling" not in render_study(inputs())
+
+
+
+def test_the_report_states_the_near_miss_share_it_got_not_the_one_it_aimed_for():
+    markdown = render_study(inputs())
+    # The fixture draws 1 near miss in total, against R1's two sampled Clauses of 40 not-held each.
+    assert "The sample got" in markdown
+    assert "aim was 50%" in markdown
+
+
+def test_the_report_says_how_much_of_the_corpus_the_heading_arm_actually_removes():
+    markdown = render_study(inputs())
+    # 459 standalone headings of 1,269 Parent Lines is 36%; 433 + 377 stay in both arms.
+    assert "**459**" in markdown
+    assert "1269" in markdown
+    assert "36%" in markdown
+    assert "understates" in markdown

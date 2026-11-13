@@ -53,7 +53,7 @@ calls are in flight (32 for the real client, 1 for the stub); it changes the spe
 | `charts.py` | The per-Rule curve PNG and the curve CSV |
 | `pipeline.py` | The stages wired together; the CLI is a thin wrapper |
 
-Ticket 08's sample (three question types, heading on against off, about 1,400 real calls) is its own
+Ticket 08's sample (three question types, heading on against off, 1,357 real calls) is its own
 command; it prints the plan before it asks anything and writes `docs/question-type-and-heading-sample.md`:
 
 ```

@@ -529,8 +529,8 @@ def _how_asked_section(inputs: ReportInputs) -> list[str]:
     heading = (
         "A section heading is shown to Jev as the Parent Line when a Clause sits under one."
         if inputs.heading_context
-        else "A section heading is **not** shown to Jev; a lead-in line such as 'Licensee "
-        "shall:' still is."
+        else "A standalone section heading is **not** shown to Jev; a Parent Line that "
+        "introduces a list, such as 'Licensee shall:', still is."
     )
     return [
         "## How Jev is asked",

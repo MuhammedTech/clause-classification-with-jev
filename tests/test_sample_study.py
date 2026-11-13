@@ -172,17 +172,54 @@ def test_heading_context_is_turned_off_only_if_off_wins_by_the_margin_else_it_st
     assert choose_heading(on, result("binary", False, 0.70, 0.70)) is True
 
 
-def test_the_bootstrap_difference_is_seeded_and_its_interval_spans_the_point_estimate(tmp_path):
+def arm_from_rule(question_type, sample, highlights, score):
+    """An arm whose P(yes) is `score(clause, held)` for every sampled Clause, so its separation is known."""
+    from jev_cascade.domain import holds
+    from jev_cascade.evaluator import separation
+
+    p_yes, by_rule = {}, {}
+    for rule_id, clauses in sample.by_rule.items():
+        marked = highlights[rule_id]
+        p_yes[rule_id] = {
+            c.key: score(c, any(holds(c, h) for h in marked)) for c in clauses
+        }
+        by_rule[rule_id] = separation(clauses, marked, p_yes[rule_id])
+    return ArmResult(arm=Arm(question_type, True), by_rule=by_rule, p_yes=p_yes)
+
+
+def test_the_bootstrap_difference_of_two_identical_arms_is_exactly_zero():
     clauses, highlights = make_corpus()
     sample = draw_sample(clauses, highlights, [R1], held=4, not_held=12, per_document=4, seed=1)
-    cache = tmp_path / "pyes.jsonl"
-    a = run_arm(Arm("binary", True), sample, highlights, StubJevClient(seed=1), cache)
-    b = run_arm(Arm("score2", True), sample, highlights, StubJevClient(seed=2), cache)
+    a = arm_from_rule("binary", sample, highlights, lambda c, held: 0.9 if held else 0.1)
+    b = arm_from_rule("score2", sample, highlights, lambda c, held: 0.9 if held else 0.1)
 
-    one = bootstrap_difference(a, b, sample, highlights, draws=200, seed=3)
-    two = bootstrap_difference(a, b, sample, highlights, draws=200, seed=3)
+    assert bootstrap_difference(a, b, sample, highlights, draws=100, seed=3) == (0.0, 0.0, 0.0)
 
-    assert one == two
-    point, low, high = one
-    assert low <= point <= high
-    assert point == pytest.approx(b.mean_separation - a.mean_separation)
+
+def test_a_perfect_arm_against_an_inverted_one_has_an_interval_wholly_above_zero():
+    clauses, highlights = make_corpus()
+    sample = draw_sample(clauses, highlights, [R1], held=4, not_held=12, per_document=4, seed=1)
+    inverted = arm_from_rule("binary", sample, highlights, lambda c, held: 0.1 if held else 0.9)
+    perfect = arm_from_rule("score2", sample, highlights, lambda c, held: 0.9 if held else 0.1)
+
+    point, low, high = bootstrap_difference(inverted, perfect, sample, highlights, draws=200, seed=3)
+
+    # Separation 0.0 against 1.0: a difference of 1.0 on every resample that has both groups.
+    assert (point, low, high) == (1.0, 1.0, 1.0)
+
+
+def test_the_bootstrap_gives_the_same_interval_for_the_same_seed():
+    clauses, highlights = make_corpus()
+    sample = draw_sample(clauses, highlights, [R1], held=4, not_held=12, per_document=4, seed=1)
+    a = arm_from_rule("binary", sample, highlights, lambda c, held: 0.7 if held else 0.3)
+    # Mostly separates, but every third Clause is scored the wrong way round, so resamples differ.
+    b = arm_from_rule(
+        "score2",
+        sample,
+        highlights,
+        lambda c, held: 0.5 + (0.3 if held else -0.3) * (1 if c.index % 3 else -1),
+    )
+
+    assert bootstrap_difference(a, b, sample, highlights, draws=50, seed=3) == bootstrap_difference(
+        a, b, sample, highlights, draws=50, seed=3
+    )

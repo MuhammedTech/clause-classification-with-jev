@@ -60,9 +60,11 @@ met. 1,357 real calls, `jev-1.14.0`, about 100 seconds, a few cents.
 
 **Read this before trusting "no difference".** Every Rule scored at least 0.938 in every arm, so the
 sample is near its ceiling and has little room to separate anything. `choice2` was a hair below
-`binary` (interval -0.016 to -0.000), `score2` indistinguishable. The heading check moved nothing:
-only 97 of the 420 sampled Clauses have a heading Parent Line, and the sample holds only 40 near misses
-in all, because few not-held Clauses share a heading with a held one under a four-per-document cap.
+`binary` by 0.007 each, with intervals just below zero once the bootstrap resamples documents:
+distinguishable and too small to matter, so `binary` stands. The heading check moved nothing: only 97
+of the 420 sampled Pairs have a standalone heading Parent Line, and the sample holds only 40 near
+misses in all (14% of the not-held Clauses, against an aim of 50%), because few not-held Clauses share
+a heading with a held one.
 The harm ADR-0004 worried about, a section label stamped on unrelated Clauses, would show over the
 full corpus's many unrelated Clauses, which separation on a held-enriched sample does not measure. If
 ticket 09 shows a Rule with many unexpected escalations under a heading, heading off is the first
@@ -70,10 +72,16 @@ thing to try, and it is a one-line config change plus a fresh cache.
 
 **Decisions that differ from the ticket text:**
 
-- **"Heading" is a section heading, not every Parent Line.** ADR-0004 and this ticket are about the
-  heading. A Parent Line can also be a lead-in ("10.1 Licensee shall:"), and blanking those would test
+- **"Heading" is a standalone section heading, not every Parent Line, and that is only 36% of them.**
+  A Parent Line can also introduce a list ("10.1 Licensee shall:"), and blanking those would test
   something else. The Splitter now records which it is (`Clause.parent_is_heading`, true for a single
-  short label after a marker with no colon, the Splitter's own heading test); only those are taken out.
+  short label after a marker with no colon, the Splitter's own heading test); only those are taken
+  out. Measured over the corpus: 3,246 Clauses, 1,269 with a Parent Line, 459 standalone headings, 433
+  that introduce a list, 377 longer lines. Many of those 377 are a heading with its body text on the
+  same line, because some documents' pages collapse to one line, and they stay in both arms. **So the
+  heading-off arm removes the heading for about a third of Parent Lines, and the null result
+  understates what removing every heading would do.** Reading a heading out of those lines needs the
+  cleverer marker detection ADR-0004 declines, so it was not built. It is the open follow-up.
 - **Separation is a new Evaluator figure** (`evaluator.separation`, glossary entry added): the chance a
   holding Clause outscores a non-holding one, ties half. Real Jev answers cluster, so ties are counted.
 - **The two other types are `score2` and `choice2`, with minimal criteria** (`["No", "Yes"]` and
@@ -83,6 +91,28 @@ thing to try, and it is a one-line config change plus a fresh cache.
   still serve.
 - **Near-miss negatives.** Half the not-held Clauses sit under a held Clause's heading. Plain random
   negatives are boilerplate every type scores near zero on.
+
+**Cost against the ticket's "a few hundred calls".** The ticket's figure was loose. The sample is 420
+Pairs an arm and 1,357 calls in all, about four times a few hundred, for a few cents and 100 seconds.
+That is 6% of the full run's 22,708 calls.
+
+**Code review (Standards and Spec), settled in the follow-up commit.** Fixed: the retired word
+"lead-in" came out of the code and docs; the glossary gained Held, Near miss, Heading-affected Clause
+and Arm; "ROC" came out of a docstring; stale call counts now read 1,357; `ArmResult.calls_made`
+(never read) was removed; `keep_heading` became `heading_context`. The report now states what the
+sample actually got rather than what it aimed for (14% near misses, not 50%; the per-document cap
+applies to each of three draws, so one Rule took up to 11 Clauses from one document), and says the
+heading-off arm covers 36% of Parent Lines. The bootstrap now resamples documents, since Clauses from
+one contract are alike, and no longer widens its interval to contain the point estimate; its test no
+longer asserts that tautology. ADR-0003 records the one seeded exception.
+
+Left alone, as judgement calls: `Difference` stays an unlabelled triple and `sample_study.py` stays one
+module (drawing, running, deciding and bootstrapping change together for one ticket); the `'on' if x
+else 'off'` and "find the arm for this type" lookups stay inline. `pipeline.run`'s `question_type` and
+`heading_context` are reachable only from tests and the study's config defaults, because the ticket asks
+for them to be read from configuration, not set by flags. I did not redraw the sample to enforce a
+strict per-document cap: the null result was already seen, and redrawing after seeing it would make the
+sample a function of the outcome.
 
 **Added:** `sample_study.py`, `sample_report.py`, `sample_cli.py` (`jev-cascade-sample`); the pipeline's
 report gains a "How Jev is asked" section with the selection-leak disclosure; `run_pairs` and

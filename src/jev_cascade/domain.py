@@ -41,9 +41,9 @@ class Clause:
     end: int
     text: str
     parent_line: str = ""
-    #: Whether `parent_line` is a section heading ("9. Limitation of Liability") rather than a
-    #: lead-in ("10.1 Licensee shall:"). Never shown to Jev; ticket 08 reads it to take the heading
-    #: out of Jev's context and leave a lead-in in.
+    #: Whether `parent_line` is a standalone section heading ("9. Limitation of Liability") rather
+    #: than a line that introduces a list ("10.1 Licensee shall:") or a longer line with its body
+    #: text on it. Never shown to Jev; ticket 08 reads it to take the heading out of Jev's context.
     parent_is_heading: bool = False
 
     def __post_init__(self) -> None:
@@ -87,8 +87,10 @@ def holds(clause: Clause, highlight: Highlight) -> bool:
 def without_heading(clauses: Iterable[Clause]) -> list[Clause]:
     """The Clauses as Jev is shown them when heading context is off.
 
-    A Parent Line that is a section heading is blanked; a lead-in ("Licensee shall:") stays,
-    because a list item read without its lead-in is a different and unfair question. The span and
+    A Parent Line that is a standalone section heading is blanked. One that introduces a list
+    ("Licensee shall:") stays, because a list item read without it is a different and unfair
+    question, and so does a longer line carrying body text, which is not a heading by the
+    Splitter's own test (see `Clause.parent_is_heading`). The span and
     text are untouched, so grading is identical in both arms, and the Parent Line is part of the
     cache fingerprint, so the two arms never share an answer where they differ.
     """

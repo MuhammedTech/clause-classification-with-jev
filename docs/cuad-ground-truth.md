@@ -281,6 +281,11 @@ real client, a call takes 0.4 to 1s, so a serial run would need 2.5 to 6 hours. 
 runner concurrent: 32 calls in flight reached 18.5 requests a second, so the full run is about 20
 minutes. Jev is not exactly repeatable: the same Pair differs by up to 0.04 between runs.
 
+**The real run fans out (2026-11-13, ADR-0006).** It sends each Clause once with all seven questions,
+so the calls are **3,246, not 22,722**; the 22,722 Pairs, and a cache row for each, are unchanged. The
+~6.4 million tokens and ~$0.27 above assume Jev bills the Clause again for every question, so they
+are now an upper bound. The replies carry `usage`, and the command prints its sum.
+
 ## Reproducing these numbers
 
 The probe scripts were throwaway. Anything here should be re-asserted as a test in the corpus loader

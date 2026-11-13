@@ -316,3 +316,103 @@ def test_a_cache_with_no_timestamps_has_no_timing(tmp_path):
     _, stats = run_pairs(clauses(), [R1], CountingJevClient(StubJevClient()), cache)
 
     assert stats.timing is None
+
+
+# ---- Fan-out: every Rule's question about a Clause goes in one call -------------------------------
+
+R2 = rule("R2")
+
+
+class RecordingManyClient(StubJevClient):
+    """The stub that notes, per call, which questions it was asked together."""
+
+    def __init__(self):
+        super().__init__()
+        object.__setattr__(self, "asked", [])
+
+    def p_yes_many(self, clause_text, parent_line, questions, question_type):
+        self.asked.append(sorted(questions))
+        return {
+            qid: self.p_yes(clause_text, parent_line, question, question_type)
+            for qid, question in questions.items()
+        }
+
+
+def test_every_rule_is_asked_about_a_clause_in_one_call(tmp_path):
+    cache = tmp_path / "pyes.jsonl"
+    client = RecordingManyClient()
+
+    table, stats = run_pairs(clauses(), [R1, R2], client, cache)
+
+    # Three Clauses, two Rules: three calls carrying two questions each, not six calls.
+    assert client.asked == [["R1", "R2"]] * 3
+    assert stats.calls_made == 3
+    assert stats.pairs == 6
+    assert sorted(table) == ["R1", "R2"]
+    assert len(table["R1"]) == len(table["R2"]) == 3
+    # The cache still holds one row per Pair, so nothing downstream changes shape.
+    assert len(cache.read_text().splitlines()) == 6
+
+
+def test_the_fan_out_gives_the_answers_the_questions_would_get_one_at_a_time(tmp_path):
+    together, _ = run_pairs(clauses(), [R1, R2], RecordingManyClient(), tmp_path / "a.jsonl")
+    apart = {}
+    for r in (R1, R2):
+        table, _ = run_pairs(clauses(), [r], StubJevClient(), tmp_path / f"{r.id}.jsonl")
+        apart.update(table)
+    assert together == apart
+
+
+def test_only_the_rules_missing_from_the_cache_are_asked(tmp_path):
+    cache = tmp_path / "pyes.jsonl"
+    run_pairs(clauses(), [R1], StubJevClient(), cache)  # R1 is cached for every Clause
+
+    client = RecordingManyClient()
+    _, stats = run_pairs(clauses(), [R1, R2], client, cache)
+
+    assert client.asked == [["R2"]] * 3
+    assert stats.cache_hits == 3
+
+
+def test_the_rows_of_one_call_share_one_timestamp_and_count_as_one_call(tmp_path):
+    cache = tmp_path / "pyes.jsonl"
+    clock = Ticking(1_000.0, [1, 1, 1])
+
+    _, stats = run_pairs(clauses(), [R1, R2], RecordingManyClient(), cache, now=clock)
+
+    stamps = [json.loads(line)["asked_at"] for line in cache.read_text().splitlines()]
+    assert sorted(stamps) == [1000.0, 1000.0, 1001.0, 1001.0, 1002.0, 1002.0]
+    assert stats.timing.answers == 3  # calls, not rows
+
+
+def test_a_call_that_fails_leaves_no_half_answered_clause(tmp_path):
+    cache = tmp_path / "pyes.jsonl"
+    interrupted = FailingJevClient(RecordingManyClient(), limit=1)
+    with pytest.raises(JevCallLimitReached):
+        run_pairs(clauses(), [R1, R2], interrupted, cache)
+
+    # One whole call landed: both of its Rules, for one Clause.
+    rows = [json.loads(line) for line in cache.read_text().splitlines()]
+    assert len(rows) == 2
+    assert {row["rule_id"] for row in rows} == {"R1", "R2"}
+    assert len({row["clause_start"] for row in rows}) == 1
+
+    resumed = RecordingManyClient()
+    run_pairs(clauses(), [R1, R2], resumed, cache)
+    assert resumed.asked == [["R1", "R2"]] * 2
+
+
+def test_a_client_that_cannot_fan_out_is_asked_one_question_at_a_time(tmp_path):
+    client = CountingJevClient(StubJevClient())  # no p_yes_many on the stub's own surface
+
+    class OneAtATime:
+        model_version = StubJevClient().model_version
+        is_stub = True
+
+        def p_yes(self, clause_text, parent_line, question, question_type):
+            client.calls += 1
+            return StubJevClient().p_yes(clause_text, parent_line, question, question_type)
+
+    table, stats = run_pairs(clauses(), [R1, R2], OneAtATime(), tmp_path / "pyes.jsonl")
+    assert client.calls == 6
+    assert len(table["R1"]) == len(table["R2"]) == 3

@@ -66,7 +66,9 @@ Escalated, and whether the lawyers highlighted everything.
   and the separate figures above. No folds, no tuning, no randomness.
 - **Report** renders the Evaluator's output to Markdown plus PNG charts, rebuildable from the cache
   with no network.
-- Jev is called once per (Clause, Rule), never with two questions in one call.
+- Jev is called **once per Clause with all seven Rules' questions in the same call** (the fan-out,
+  ADR-0006), each question answered under its own id. This reverses the earlier "once per (Clause,
+  Rule), never with two questions in one call", on the user's decision of 2026-11-13.
 - Prices live in one configuration place, each with a source and a date. Jev's $0.042 per million
   input tokens is from one unverified blog and must be confirmed.
 
@@ -102,7 +104,9 @@ Good tests check behaviour at a seam, with inputs and expected outputs a person 
 ## Further notes
 
 - The Jev key comes from the user. Everything runs on the stub until then.
-- The whole run is 22,722 Jev calls (3,246 Clauses × 7 Rules), about 19 minutes and roughly $0.27.
+- The whole run is 3,246 Jev calls, one per Clause carrying 7 questions (22,722 Pairs), roughly $0.27
+  at the cautious per-Pair token count. The replies report `usage`, so the real figure is checked
+  after the run.
   Ticket 06 re-derived the cost with the Parent Lines counted: about 6.4 million input tokens, an
   estimate at 4 characters a token. The earlier $0.20 predates them.
 - Third-party findings worth citing: tuned cutoffs matter a lot (Arize); 34.7% escalation for Jev

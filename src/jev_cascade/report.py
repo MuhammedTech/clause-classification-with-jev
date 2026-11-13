@@ -437,7 +437,10 @@ def _cost_section(inputs: ReportInputs) -> list[str]:
         "The baseline is the expensive model alone: one call per Clause carrying every Rule "
         "asked. The cascade's expensive part is one call per Clause Escalated for at least one "
         "Rule, sized to only its Escalated questions; a Fully Binned Clause gets no call. Jev is "
-        "charged for every Pair at input price, and is not batched.",
+        "called once per Clause with every Rule's question in the same call, charged at input "
+        "price and not batched. Its tokens are counted per Pair (the Clause once for each "
+        "question), the cautious figure, since how Jev bills the fan-out is only known from the "
+        "replies' own usage after a run.",
         "",
     ]
     lines.extend(_stub_label(inputs))
@@ -612,6 +615,11 @@ def _how_asked_section(inputs: ReportInputs) -> list[str]:
         f"- **Question type: {inputs.question_type}**, one type for every Rule, with each Rule's "
         "Detection Question as approved in ticket 08, word for word.",
         f"- **Heading context: {'on' if inputs.heading_context else 'off'}.** {heading}",
+        "- **Every Rule's question about a Clause goes in one call** (the fan-out): the Clause is "
+        "sent once and each question is answered separately, under its own id. Ticket 08 settled "
+        "the question type, the wording and the heading on one question a call, so the figures "
+        "below are not that experiment repeated: a probability can move when other questions ride "
+        "in the same call, and this report does not measure by how much.",
         "- **Both choices were made on a sample of Pairs that the full run later scored.** Picking "
         "a setting on data and then reporting on the same data is a selection leak. It is small: "
         "two settings, chosen on separation alone, from a sample that is a few percent of the "

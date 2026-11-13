@@ -35,7 +35,7 @@ from typing import Callable, Iterable, Sequence
 
 from . import config
 from .domain import Clause
-from .jev import JevClient
+from .jev import JevClient, ask_many
 from .rulebook import Rule
 
 #: A cached answer is identified by document, Clause span, Rule, question type, model version and
@@ -62,6 +62,7 @@ class AnswerTiming:
     of any size, so a report can say when a run was resumed.
     """
 
+    #: Calls, not rows: the rows of one call share a timestamp, and a call is one Clause.
     answers: int
     first_at: float
     last_at: float
@@ -218,6 +219,10 @@ def run_pairs(
 ) -> tuple[PYesTable, RunStats]:
     """Ask Jev about every (Clause, Rule) Pair, skipping any already in the cache.
 
+    Each Clause is one call carrying every Rule still missing for it, so `calls_made` counts
+    Clauses (or fewer, when some Pairs were cached), not Pairs. The cache still holds one row per
+    Pair.
+
     Returns the P(yes) table, keyed by Rule id then by (document, Clause span), and the run's
     counts and wall clock.
 
@@ -242,46 +247,59 @@ def run_pairs(
     model_version = client.model_version
     _close_dangling_line(cache_path)
 
-    # Everything this run needs, in order, and the subset that is not in the cache. A Pair that
-    # appears twice is asked once: concurrent workers would otherwise race to ask it twice.
+    # Everything this run needs, in order, and the subset that is not in the cache, grouped by what
+    # Jev is shown: one call per Clause carrying every Rule still missing for it (the fan-out). A
+    # Pair that appears twice is asked once: concurrent workers would otherwise race to ask it twice.
     needed: list[tuple[str, tuple[str, str], PairKey]] = []
-    to_ask: dict[PairKey, tuple[Clause, Rule]] = {}
+    to_ask: dict[tuple, tuple[Clause, list[tuple[Rule, PairKey]]]] = {}
+    queued: set[PairKey] = set()
     cache_hits = 0
     for clause in clauses:
         for rule in rules:
             key = _key(clause, rule, model_version, question_type)
             needed.append((rule.id, clause.key, key))
-            if key in cached or key in to_ask:
+            if key in cached or key in queued:
                 cache_hits += 1
-            else:
-                to_ask[key] = (clause, rule)
+                continue
+            queued.add(key)
+            # The key's document, span and prompt fingerprint: everything Jev is shown, not the Rule.
+            shown = (key[0], key[1], key[2], key[6])
+            to_ask.setdefault(shown, (clause, []))[1].append((rule, key))
 
     started = time.monotonic()
     calls_made = 0
     first_error: BaseException | None = None
-    pending = iter(to_ask.items())
-    in_flight: dict[Future, tuple[PairKey, Clause, Rule]] = {}
+    pending = iter(to_ask.values())
+    in_flight: dict[Future, tuple[Clause, list[tuple[Rule, PairKey]]]] = {}
 
     with cache_path.open("a", encoding="utf-8") as handle:
 
         def settle(future: Future) -> None:
-            """Record one finished call: keep its answer, or remember the first failure."""
+            """Record one finished call: keep its answers, or remember the first failure.
+
+            A call is all or nothing: every Rule it carried is written, or none is, so a failure
+            never leaves a Clause half answered.
+            """
             nonlocal calls_made, first_error
-            key, clause, rule = in_flight[future]
+            clause, asked = in_flight[future]
             try:
-                p_yes = future.result()
+                answers = future.result()
+                values = [float(answers[rule.id]) for rule, _ in asked]
             except BaseException as error:  # noqa: BLE001 - re-raised below, after the drain
                 first_error = first_error or error
                 del in_flight[future]
                 return
+            # One stamp for the whole call: the rows of a call arrived together, and the timing
+            # counts calls.
             asked_at = now()
-            cached[key] = p_yes
-            stamps[key] = asked_at
             calls_made += 1
             # Written before it leaves `in_flight`, so an error while writing cannot also make the
-            # drain forget the call. Flushed per answer so an interruption loses at most the calls
+            # drain forget the call. Flushed per call so an interruption loses at most the calls
             # still in flight.
-            handle.write(_row(clause, rule, model_version, question_type, p_yes, asked_at))
+            for (rule, key), p_yes in zip(asked, values):
+                cached[key] = p_yes
+                stamps[key] = asked_at
+                handle.write(_row(clause, rule, model_version, question_type, p_yes, asked_at))
             handle.flush()
             del in_flight[future]
 
@@ -292,15 +310,16 @@ def run_pairs(
                     item = next(pending, None)
                     if item is None:
                         break
-                    key, (clause, rule) = item
+                    clause, asked = item
                     future = pool.submit(
-                        client.p_yes,
+                        ask_many,
+                        client,
                         clause_text=clause.text,
                         parent_line=clause.parent_line,
-                        question=rule.detection_question,
+                        questions={rule.id: rule.detection_question for rule, _ in asked},
                         question_type=question_type,
                     )
-                    in_flight[future] = (key, clause, rule)
+                    in_flight[future] = item
                 if not in_flight:
                     break
                 done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
@@ -326,8 +345,10 @@ def run_pairs(
         calls_made=calls_made,
         cache_hits=cache_hits,
         seconds=time.monotonic() - started,
+        # Distinct stamps are calls: the rows of one call share a stamp. Two calls landing in the
+        # same millisecond would count as one, which is negligible beside thousands of calls.
         timing=answer_timing(
-            stamps[key] for key in {key for _, _, key in needed} if key in stamps
+            {stamps[key] for key in {key for _, _, key in needed} if key in stamps}
         ),
     )
     return table, stats

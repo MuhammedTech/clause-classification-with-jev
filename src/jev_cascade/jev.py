@@ -1,7 +1,9 @@
-"""The Jev client: one typed question about one Clause, answered with a probability.
+"""The Jev client: typed questions about one Clause, each answered with a probability.
 
-Jev is called once per (Clause, Rule), never with two questions in one call. Jev sees the Parent
-Line plus the Clause text; grading uses only the Clause's own span.
+Jev is called **once per Clause, with every Rule's question in the same call** (the fan-out): the
+Clause is sent once and each question is answered separately, keyed by its id. A client that cannot
+fan out only has `p_yes` and is asked one question at a time; `ask_many` chooses. Jev sees the
+Parent Line plus the Clause text; grading uses only the Clause's own span.
 
 This module holds the interface, a deterministic seeded stub and the test wrappers. The real HTTP
 client is in `typesafe.py`, and `clients.py` chooses between the two. Every figure derived from the
@@ -12,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Mapping, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -38,6 +40,27 @@ class JevClient(Protocol):
     ) -> float:
         """The probability Jev returns that the Detection Question is answered yes."""
         ...
+
+
+def ask_many(
+    client: JevClient,
+    clause_text: str,
+    parent_line: str,
+    questions: Mapping[str, str],
+    question_type: str,
+) -> dict[str, float]:
+    """P(yes) for every question about one Clause, keyed by the question's id.
+
+    One call when the client has `p_yes_many`, otherwise one call per question. The runner goes
+    through here so a client written before the fan-out keeps working.
+    """
+    many = getattr(client, "p_yes_many", None)
+    if many is not None:
+        return many(clause_text, parent_line, questions, question_type)
+    return {
+        question_id: client.p_yes(clause_text, parent_line, question, question_type)
+        for question_id, question in questions.items()
+    }
 
 
 @dataclass(frozen=True)
@@ -89,6 +112,19 @@ class StubJevClient:
         draw = int.from_bytes(digest[:8], "big") / float(1 << 64)
         return round(draw, self.decimals)
 
+    def p_yes_many(
+        self,
+        clause_text: str,
+        parent_line: str,
+        questions: Mapping[str, str],
+        question_type: str,
+    ) -> dict[str, float]:
+        """Each answer is what the question would get alone, so fanning out changes no stub figure."""
+        return {
+            question_id: self.p_yes(clause_text, parent_line, question, question_type)
+            for question_id, question in questions.items()
+        }
+
 
 @dataclass
 class CountingJevClient:
@@ -117,6 +153,17 @@ class CountingJevClient:
     ) -> float:
         self.calls += 1
         return self.inner.p_yes(clause_text, parent_line, question, question_type)
+
+    def p_yes_many(
+        self,
+        clause_text: str,
+        parent_line: str,
+        questions: Mapping[str, str],
+        question_type: str,
+    ) -> dict[str, float]:
+        """One call, however many questions it carries."""
+        self.calls += 1
+        return ask_many(self.inner, clause_text, parent_line, questions, question_type)
 
 
 class JevCallLimitReached(RuntimeError):
@@ -151,6 +198,18 @@ class FailingJevClient:
         self.calls += 1
         return self.inner.p_yes(clause_text, parent_line, question, question_type)
 
+    def p_yes_many(
+        self,
+        clause_text: str,
+        parent_line: str,
+        questions: Mapping[str, str],
+        question_type: str,
+    ) -> dict[str, float]:
+        if self.calls >= self.limit:
+            raise JevCallLimitReached(f"stopped after {self.limit} calls")
+        self.calls += 1
+        return ask_many(self.inner, clause_text, parent_line, questions, question_type)
+
 
 class JevCallRefused(RuntimeError):
     """Raised by `CacheOnlyJevClient` when a Pair is not in the cache."""
@@ -182,3 +241,12 @@ class CacheOnlyJevClient:
         question_type: str,
     ) -> float:
         raise JevCallRefused("this Pair is not in the cache and the run may not ask Jev")
+
+    def p_yes_many(
+        self,
+        clause_text: str,
+        parent_line: str,
+        questions: Mapping[str, str],
+        question_type: str,
+    ) -> dict[str, float]:
+        raise JevCallRefused("this Clause is not fully in the cache and the run may not ask Jev")

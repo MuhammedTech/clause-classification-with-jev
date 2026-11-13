@@ -103,7 +103,7 @@ def test_jev_time_is_given_measured_and_at_the_published_rate_limit(result):
     measured = _row(section, "Jev wall clock, measured")
     assert measured[1].endswith("s (stub timing)")
     at_limit = _row(section, "Jev time at the published rate limit")
-    # 1,000 Clauses * 1 Rule = 1,000 calls at 1,200 a minute.
+    # 1,000 Clauses is 1,000 calls (every Rule in one call) at 1,200 a minute.
     assert at_limit[1].startswith("0.83 minutes")
 
 
@@ -137,9 +137,10 @@ def test_a_cache_with_no_timestamps_reports_no_measured_time(tmp_path):
 
 def test_the_full_run_is_sized_over_all_53_documents_not_remembered(result):
     section = _section(result.markdown, "## Cost and time")
-    # docs/cuad-ground-truth.md: 3,246 Clauses on the final partition, times 7 Rules.
+    # docs/cuad-ground-truth.md: 3,246 Clauses on the final partition. One call a Clause, carrying
+    # all 7 Rules' questions, so 3,246 calls and not 3,246 x 7.
     assert _row(section, "Clauses, all 53 documents")[1] == "3,246"
-    assert _row(section, "Jev calls for the full run")[1] == "22,722"
+    assert _row(section, "Jev calls for the full run")[1] == "3,246"
 
 
 def test_the_report_says_savings_track_the_fully_binned_share(result):

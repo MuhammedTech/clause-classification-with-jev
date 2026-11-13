@@ -260,11 +260,11 @@ def test_an_interrupted_real_run_resumes_from_the_cache_and_records_the_model_ve
     clauses = [Clause("D", i, i * 10, i * 10 + 10, f"clause {i}", f"{i}. Heading") for i in range(4)]
     cache = tmp_path / "pyes.jsonl"
 
-    interrupted = FailingJevClient(client(FakeTransport(ok(0.3))), limit=2)
+    interrupted = FailingJevClient(client(FakeTransport(many_reply({"R1": 0.3}))), limit=2)
     with pytest.raises(JevCallLimitReached):
         run_pairs(clauses, [rule("R1")], interrupted, cache)
 
-    transport = FakeTransport(ok(0.6))
+    transport = FakeTransport(many_reply({"R1": 0.6}))
     resumed = CountingJevClient(client(transport))
     table, _ = run_pairs(clauses, [rule("R1")], resumed, cache)
 
@@ -376,3 +376,65 @@ def test_a_reply_missing_the_probability_is_an_error_not_a_zero():
     bad = 200, {"model": MODEL, "answers": {"q": {"type": "choice", "probabilities": {"no": 1.0}}}}
     with pytest.raises(JevError):
         ask(client(FakeTransport(bad)), question_type="choice2")
+
+
+# ---- Fan-out: several questions about one Clause in one request ----------------------------------
+
+QUESTIONS = {
+    "R1": "Does this clause cap or limit a party's liability?",
+    "R2": "Does this clause name the governing law?",
+}
+
+
+def many_reply(probabilities, model=MODEL, input_tokens=40):
+    return 200, {
+        "model": model,
+        "answers": {qid: {"type": "noul", "noul": p} for qid, p in probabilities.items()},
+        "usage": {"input_tokens": input_tokens, "output_tokens": 2},
+    }
+
+
+def ask_many(c, questions=QUESTIONS, **overrides):
+    args = dict(
+        clause_text="Liability is capped at fees paid.",
+        parent_line="12. LIMITATION OF LIABILITY",
+        questions=questions,
+        question_type="binary",
+    )
+    args.update(overrides)
+    return c.p_yes_many(**args)
+
+
+def test_every_question_goes_in_one_request_and_each_answer_is_read_by_its_id():
+    transport = FakeTransport(many_reply({"R1": 0.9, "R2": 0.1}))
+
+    answers = ask_many(client(transport))
+
+    assert answers == {"R1": 0.9, "R2": 0.1}
+    ((_, _, body),) = transport.requests  # one request, not two
+    assert body["state"] == "12. LIMITATION OF LIABILITY\n\nLiability is capped at fees paid."
+    assert body["questions"] == {
+        "R1": {"type": "noul", "instructions": QUESTIONS["R1"]},
+        "R2": {"type": "noul", "instructions": QUESTIONS["R2"]},
+    }
+
+
+def test_a_reply_that_leaves_a_question_unanswered_is_an_error_not_a_zero():
+    from jev_cascade.typesafe import JevError
+
+    with pytest.raises(JevError):
+        ask_many(client(FakeTransport(many_reply({"R1": 0.9}))))
+
+
+def test_the_input_tokens_the_replies_report_are_added_up():
+    c = client(FakeTransport(many_reply({"R1": 0.9, "R2": 0.1}, input_tokens=40)))
+    ask_many(c)
+    ask_many(c)
+    assert c.input_tokens == 80
+
+
+def test_a_single_question_is_the_same_request_as_before_the_fan_out():
+    transport = FakeTransport(ok(0.83))
+    assert ask(client(transport)) == 0.83
+    ((_, _, body),) = transport.requests
+    assert list(body["questions"]) == ["q"]

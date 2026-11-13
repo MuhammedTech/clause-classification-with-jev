@@ -35,8 +35,10 @@ The default is the signal-free stub. `--jev real` asks TypeSafe's Jev (pinned to
 reads the key from `JEV_API_KEY` in the environment, never from the repo. Load a git-ignored `.env`
 into the shell first: `set -a; . ./.env; set +a`. `--from-cache` needs no key.
 
-**The real run (ticket 09)** is every document against every Rule, about 22,722 calls, about $0.27 at
-the published price and 19 minutes. Each answer is stamped with when it arrived, so the report
+**The real run (ticket 09)** is every document against every Rule, 3,246 calls: one per Clause, with all
+seven Rules' questions in it (22,722 Pairs, still one cache row each). At most about $0.27 at the
+published price; the command prints the input tokens Jev's replies reported, to check that against the
+invoice. Each call is stamped with when it arrived, so the report
 rebuilds from the cache with the real run's date and Jev time:
 
 ```

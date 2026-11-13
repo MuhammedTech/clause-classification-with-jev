@@ -92,3 +92,16 @@ def test_the_measured_jev_time_is_the_run_s_own_and_not_called_stub(result):
     assert "stub" not in line
     # A quarter of a second an answer, per 1,000 Clauses of one Rule.
     assert "250.0s" in line
+
+
+def test_the_report_says_every_rule_is_asked_in_one_call_and_what_that_changes(result):
+    markdown = result.markdown
+    asked = markdown[markdown.index("## How Jev is asked") : markdown.index("## How this is measured")]
+    assert "one call" in asked.lower()
+    # Ticket 08 settled the wording on one question a call, so the full run is not that experiment.
+    assert "ticket 08" in asked and "one question a call" in asked
+
+    cost = markdown[markdown.index("## Cost and time") : markdown.index("## Reading the curve")]
+    assert "one call per Clause" in cost
+    # The token figure is the cautious one until the replies' own usage is known.
+    assert "cautious" in cost

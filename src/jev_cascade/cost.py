@@ -11,7 +11,8 @@ Three things are priced, all over the same Clauses:
 - **The cascade's expensive part.** One call per Clause Escalated for **at least one** Rule, sized to
   only the Escalated questions. A Fully Binned Clause gets no call at all. This is why the saving
   tracks the Fully Binned Clause share and not any per-Rule Binned Share.
-- **Jev.** One call per (Clause, Rule) Pair, input tokens only, whatever the Cutoff.
+- **Jev.** One call per Clause carrying every Rule's question, input tokens only, whatever the
+  Cutoff. Tokens are counted per Pair, the cautious figure (see `jev_pair_usage`).
 
 Net saving is the baseline minus the cascade's expensive part minus Jev's cost, and it can be
 negative: a Cutoff that Bins little saves little and still pays Jev for every Pair.
@@ -86,8 +87,11 @@ def jev_pair_usage(
     questions: Mapping[str, str],
     count_tokens: TokenCounter = estimate_tokens,
 ) -> CallTotals:
-    """Jev's calls: every (Clause, Rule) Pair, shown the Parent Line, the Clause and one question.
+    """Jev's calls: one per Clause, carrying every Rule's question (the fan-out).
 
+    Input tokens are counted **per Pair**, the Parent Line and Clause once for each question, as if
+    Jev billed the Clause again for every question it answers. Whether it does is not known until a
+    run's replies report their `usage`, so this is the cautious figure: the bill can only be lower.
     Independent of any P(yes): Jev reads everything whatever the Cutoff. Input tokens only.
     """
     question_tokens = {rule_id: count_tokens(text) for rule_id, text in questions.items()}
@@ -95,8 +99,8 @@ def jev_pair_usage(
     input_tokens = 0
     for clause in clauses:
         context = count_tokens(clause.parent_line) + count_tokens(clause.text)
+        calls += 1
         for tokens in question_tokens.values():
-            calls += 1
             input_tokens += context + tokens
     return CallTotals(calls=calls, input_tokens=input_tokens, output_tokens=0)
 
@@ -219,16 +223,17 @@ class JevTime:
     minutes_per_1000_clauses_at_rate_limit: float
 
 
-def jev_time(stats: RunStats, rules_asked: int, rate_limit_per_minute: float) -> JevTime:
+def jev_time(stats: RunStats, rate_limit_per_minute: float) -> JevTime:
     """Scale the runner's timing to 1,000 Clauses.
 
-    Seconds a call, times the Rules asked, times 1,000. When the cache carries timestamps the
+    Seconds a call, times 1,000: a call is one Clause with every Rule's question in it, so 1,000
+    Clauses are 1,000 calls however many Rules are asked. When the cache carries timestamps the
     seconds come from them (first to last answer, pauses left out), so a report rebuilt from the
     cache shows the real run's timing. A cache with none falls back to the runner's own clock over
     the calls it made, which also covers the cache write after each call; that is `None` when it
     made none, since the clock then timed a file read and not Jev.
     """
-    calls = rules_asked * CLAUSES_PER_THOUSAND
+    calls = CLAUSES_PER_THOUSAND
     seconds = None
     timing = stats.timing
     if timing is not None and timing.answers > 1:
@@ -264,7 +269,7 @@ def full_run_estimate(
     jev_input_per_mtok: float | None = None,
     rate_limit_per_minute: float | None = None,
 ) -> FullRunEstimate:
-    """The size of the whole run: every Clause against every Rule, Jev only.
+    """The size of the whole run: every Clause against every Rule, Jev only, one call a Clause.
 
     Replaces the spec's "roughly $0.20", which predates the Parent Lines and was never recomputed.
     """
@@ -323,6 +328,6 @@ def build_cost_report(
     return CostReport(
         usage=usage,
         figures=figures,
-        time=jev_time(stats, usage.rules, config.JEV_RATE_LIMIT_PER_MINUTE.value),
+        time=jev_time(stats, config.JEV_RATE_LIMIT_PER_MINUTE.value),
         full_run=full_run_estimate(corpus_clauses, all_questions),
     )

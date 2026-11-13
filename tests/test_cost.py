@@ -14,7 +14,7 @@ Questions: R1 "q q q" (3 words), R2 "q q q q" (4), R3 "q q q q q" (5). Overhead 
 Cascade expensive input: C0 10+6+(3+4)=23, C2 10+2+2+5=19, total 42; output (2+1)*7=21.
 Expensive alone, every Clause with all 3 questions (12 words): C0 10+6+12=28, C1 10+2+4+12=28,
 C2 10+2+2+12=26, total 82; output 3 Clauses * 3 questions * 7 = 63.
-Jev, every Pair, no overhead: Parent Line + text + that question. C0 6+3, 6+4, 6+5 = 30;
+Jev, one call a Clause, tokens counted per Pair, no overhead: Parent Line + text + that question. C0 6+3, 6+4, 6+5 = 30;
 C1 (2+4)=6 each, 6*3+12 = 30; C2 (2+2)=4 each, 4*3+12 = 24. Total 84.
 """
 
@@ -74,9 +74,12 @@ def test_the_expensive_model_alone_reads_every_clause_with_every_question():
     assert result.alone.input_tokens == 82
 
 
-def test_jev_is_charged_every_pair_with_its_own_question_and_no_overhead():
+def test_jev_is_called_once_per_clause_and_charged_every_pair_with_no_overhead():
     result = usage()
-    assert result.jev.calls == 9
+    # Three Clauses, each one call carrying all three questions. Tokens are still counted per Pair,
+    # the Clause once for each question: Jev's billing of the fan-out is not known, so this is the
+    # cautious figure.
+    assert result.jev.calls == 3
     assert result.jev.input_tokens == 84
     assert result.jev.output_tokens == 0
 
@@ -88,7 +91,7 @@ def test_a_cutoff_that_bins_everything_costs_the_expensive_model_nothing():
     assert result.cascade.input_tokens == 0
     assert result.cascade.output_tokens == 0
     # Jev still read everything, and the baseline is unchanged.
-    assert result.jev.calls == 9
+    assert result.jev.calls == 3
     assert result.alone.calls == 3
 
 
@@ -165,29 +168,30 @@ def test_with_no_clauses_nothing_scales():
 
 
 def test_jev_time_per_thousand_clauses_scales_from_seconds_per_call():
-    # 6 calls in 3 seconds is half a second a call; 2 Rules means 2,000 calls per 1,000 Clauses.
-    stats = RunStats(pairs=6, calls_made=6, cache_hits=0, seconds=3.0)
-    timing = jev_time(stats, rules_asked=2, rate_limit_per_minute=1200)
-    assert timing.seconds_per_1000_clauses == pytest.approx(1000.0)
-    assert timing.calls_per_1000_clauses == 2000
-    # 2,000 calls at 1,200 a minute.
-    assert timing.minutes_per_1000_clauses_at_rate_limit == pytest.approx(2000 / 1200)
+    # 6 calls in 3 seconds is half a second a call. A call is a Clause with every Rule's question in
+    # it, so 1,000 Clauses are 1,000 calls whatever the number of Rules.
+    stats = RunStats(pairs=18, calls_made=6, cache_hits=0, seconds=3.0)
+    timing = jev_time(stats, rate_limit_per_minute=1200)
+    assert timing.seconds_per_1000_clauses == pytest.approx(500.0)
+    assert timing.calls_per_1000_clauses == 1000
+    # 1,000 calls at 1,200 a minute.
+    assert timing.minutes_per_1000_clauses_at_rate_limit == pytest.approx(1000 / 1200)
 
 
 def test_jev_time_is_undefined_when_every_answer_came_from_the_cache():
     # A run with no calls took no Jev time, so a rate read off it would say zero.
     stats = RunStats(pairs=6, calls_made=0, cache_hits=6, seconds=0.01)
-    timing = jev_time(stats, rules_asked=2, rate_limit_per_minute=1200)
+    timing = jev_time(stats, rate_limit_per_minute=1200)
     assert timing.seconds_per_1000_clauses is None
-    assert timing.minutes_per_1000_clauses_at_rate_limit == pytest.approx(2000 / 1200)
+    assert timing.minutes_per_1000_clauses_at_rate_limit == pytest.approx(1000 / 1200)
 
 
 def test_jev_time_of_a_rebuild_is_the_original_runs_not_the_rebuilds():
-    # A rebuild made no calls and took 0.01s, but the cache says 101 answers arrived over 50 active
-    # seconds: half a second a call, so 2 Rules means 1,000 seconds per 1,000 Clauses.
+    # A rebuild made no calls and took 0.01s, but the cache says 101 calls landed over 50 active
+    # seconds: half a second a call, so 500 seconds per 1,000 Clauses.
     original = AnswerTiming(
         answers=101, first_at=0.0, last_at=50.0, active_seconds=50.0, longest_pause_seconds=0.5
     )
     stats = RunStats(pairs=101, calls_made=0, cache_hits=101, seconds=0.01, timing=original)
-    timing = jev_time(stats, rules_asked=2, rate_limit_per_minute=1200)
-    assert timing.seconds_per_1000_clauses == pytest.approx(1000.0)
+    timing = jev_time(stats, rate_limit_per_minute=1200)
+    assert timing.seconds_per_1000_clauses == pytest.approx(500.0)

@@ -104,6 +104,19 @@ def _print_retries(client) -> None:
         print(f"Retries: {causes}")
 
 
+def _print_usage(client) -> None:
+    """Say how many input tokens Jev's replies reported, and what that is at the published price.
+
+    The cost figures in the report are an estimate from characters; this is Jev's own count, so the
+    price can be held against the invoice. Printed on the failure path too, since a run that stopped
+    midway still paid for the calls it made.
+    """
+    tokens = getattr(getattr(client, "inner", client), "input_tokens", 0)
+    if tokens:
+        usd = tokens * config.JEV_INPUT_PRICE.value / 1_000_000
+        print(f"Jev reported {tokens:,} input tokens: ${usd:.3f} at the published price")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -146,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     except JevError as error:
         _print_retries(client)
+        _print_usage(client)
         parser.error(
             f"Jev failed: {error}. Answers already received are in the cache, so running the "
             "same command again resumes."
@@ -157,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
         f"{result.stats.cache_hits} from cache, {result.stats.seconds:.2f}s"
     )
     _print_retries(client)
+    _print_usage(client)
     return 0
 
 

@@ -53,3 +53,20 @@ def test_full_cannot_be_narrowed_by_doc_or_rule(captured, tmp_path):
         with pytest.raises(SystemExit):
             cli.main(["--full", "--out", str(tmp_path), *narrowing])
     assert captured == {}
+
+
+def test_the_command_prints_the_input_tokens_the_replies_reported(capsys):
+    class Billed:
+        input_tokens = 6_419_682
+
+    cli._print_usage(Billed())
+
+    out = capsys.readouterr().out
+    assert "6,419,682" in out
+    # At the published $42 per billion tokens: the figure to hold the invoice against.
+    assert "$0.27" in out
+
+
+def test_a_client_that_reports_no_usage_prints_nothing(capsys):
+    cli._print_usage(object())
+    assert capsys.readouterr().out == ""

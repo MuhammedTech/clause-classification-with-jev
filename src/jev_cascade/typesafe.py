@@ -1,7 +1,8 @@
 """The real Jev client: TypeSafe's System One endpoint behind the `JevClient` interface.
 
-One Detection Question per call, asked as a `noul` question, which returns the probability of yes.
-Jev is shown the Parent Line and the Clause text as its `state`, Parent Line first.
+Every Detection Question about a Clause goes in **one call** (`p_yes_many`), each asked as a `noul`
+question, which returns the probability of yes. Jev is shown the Parent Line and the Clause text as
+its `state`, Parent Line first, once per call. `p_yes` is the same call with one question in it.
 
 The model is **pinned** (`config.JEV_MODEL`), never `jev-latest`. The runner reads
 `model_version` once, before the first call, and keys every cached answer on it, so the client has
@@ -23,7 +24,7 @@ import urllib.error
 import urllib.request
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Callable, Mapping
 
 from . import config
 
@@ -138,6 +139,9 @@ class TypeSafeJevClient:
     #: Retries so far, by what caused them (`"429"`, `"529"`, `"connection"`, ...). The run prints
     #: it, because the real rate limit is unverified and a 429 is how it would show.
     retries: Counter = field(default_factory=Counter, init=False, repr=False, compare=False)
+    #: Input tokens the replies' `usage` reported, over every call this client made. The run prints
+    #: it, since the token estimate behind the cost figures is a guess at characters a token.
+    input_tokens: int = field(default=0, init=False, repr=False, compare=False)
     _next_call_at: float = field(default=0.0, init=False, repr=False)
     #: Guards `_next_call_at` and `retries`: the runner may call `p_yes` from several threads.
     _lock: threading.Lock = field(
@@ -159,6 +163,25 @@ class TypeSafeJevClient:
         question: str,
         question_type: str,
     ) -> float:
+        """One question about one Clause: the fan-out with a single question in it."""
+        answers = self.p_yes_many(
+            clause_text, parent_line, {_QUESTION_ID: question}, question_type
+        )
+        return answers[_QUESTION_ID]
+
+    def p_yes_many(
+        self,
+        clause_text: str,
+        parent_line: str,
+        questions: Mapping[str, str],
+        question_type: str,
+    ) -> dict[str, float]:
+        """Every question about one Clause in a single request, each answered under its own id.
+
+        The Clause goes once, as the `state`; each question is sent and answered separately, so
+        the answers are per question and not one answer to a compound question. A question the
+        reply leaves unanswered is an error, never a zero.
+        """
         try:
             spec = _QUESTION_TYPES[question_type]
         except KeyError:
@@ -173,11 +196,12 @@ class TypeSafeJevClient:
                 "model": self.model,
                 "state": state,
                 "questions": {
-                    _QUESTION_ID: {
+                    question_id: {
                         "type": spec.jev_type,
                         "instructions": question,
                         **spec.extra,
                     }
+                    for question_id, question in questions.items()
                 },
             },
             ensure_ascii=False,
@@ -193,9 +217,22 @@ class TypeSafeJevClient:
                 f"asked {self.model!r} but the reply came from {reply.get('model')!r}"
             )
         try:
-            return spec.read(reply["answers"][_QUESTION_ID])
+            answers = {
+                question_id: spec.read(reply["answers"][question_id]) for question_id in questions
+            }
         except (KeyError, TypeError, ValueError) as error:
             raise JevError(f"unexpected reply shape from Jev: {str(reply)[:200]}") from error
+        self._count_usage(reply)
+        return answers
+
+    def _count_usage(self, reply: dict) -> None:
+        """Add up the input tokens Jev says it billed, so the run can check its price estimate."""
+        try:
+            tokens = int(reply["usage"]["input_tokens"])
+        except (KeyError, TypeError, ValueError):
+            return  # a reply with no usage is not an error: the answers are what matter
+        with self._lock:
+            self.input_tokens += tokens
 
     def _pace(self) -> None:
         """Wait, if need be, so calls start at least one interval apart, across all threads.

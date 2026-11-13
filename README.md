@@ -77,15 +77,16 @@ uv run jev-cascade-sample --jev real --from-cache   # rebuild the report, no key
 
 ## Status
 
-Tickets 01 to 08 and 11 are built. The run scores one Rule (R1) on three documents with the stub client at
-one fixed Cutoff plus the whole Cutoff Curve, and **every figure it prints is stub-derived and
-carries no signal** (the cost section's full-run Jev estimate is the exception: it needs no P(yes)).
-The report's
-Corpus and Rulebook sections, by contrast, are counted from CUAD over all 53 documents: the seven
+Tickets 01 to 09 and 11 are built. The real run is done: all 53 documents against all seven Rules,
+22,722 Pairs in 3,246 fan-out calls, `jev-1.14.0`, 179 s, $0.085 as Jev reported it. The default
+command still uses the signal-free stub (its figures carry no signal), so the real report is the one
+built with `--jev real --full --out out/real`, and it is reproducible from the cache, not from scratch.
+The report's Corpus and Rulebook sections are counted from CUAD over all 53 documents: the seven
 Rules with their document and span counts, and the gate, which all seven pass.
 
-The remaining tickets in `.scratch/jev-cascade/issues/` deepen each stage. Ticket 03 settles the
-Splitter, 04 and 05 the metrics and the Cutoff Curve, 06 cost and time, 07 the real Jev client, and 09 runs it.
+Each ticket in `.scratch/jev-cascade/issues/` deepened one stage: 03 the Splitter, 04 and 05 the
+metrics and the Cutoff Curve, 06 cost and time, 07 the real Jev client, 08 the question type and
+heading, and 09 the real run.
 
 One decision is waiting on the user: **Uncapped Liability (R4) passes the gate** over all 53
 documents, at 17 documents and 26 spans. ADR-0005 dropped it partly for failing, measured before

@@ -286,6 +286,11 @@ so the calls are **3,246, not 22,722**; the 22,722 Pairs, and a cache row for ea
 ~6.4 million tokens and ~$0.27 above assume Jev bills the Clause again for every question, so they
 are now an upper bound. The replies carry `usage`, and the command prints its sum.
 
+**Measured (2026-11-13, `jev-1.14.0`, binary, heading on).** 3,246 calls for 22,722 Pairs in 179 s of
+wall clock, none retried. Jev reported **2,019,752 input tokens**, 31.5% of the 6,419,682 estimated,
+so the shared Clause is billed about once a call and not once a question: $0.085 at the published
+price, not $0.27. The price is the vendor's published one; the invoice is the last check.
+
 ## Reproducing these numbers
 
 The probe scripts were throwaway. Anything here should be re-asserted as a test in the corpus loader

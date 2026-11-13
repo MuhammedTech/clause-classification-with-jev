@@ -33,7 +33,19 @@ uv run jev-cascade --out out --from-cache   # rebuild the report from the cache;
 
 The default is the signal-free stub. `--jev real` asks TypeSafe's Jev (pinned to `jev-1.14.0`) and
 reads the key from `JEV_API_KEY` in the environment, never from the repo. Load a git-ignored `.env`
-into the shell first: `set -a; . ./.env; set +a`. `--from-cache` needs no key. `--workers N` sets how many
+into the shell first: `set -a; . ./.env; set +a`. `--from-cache` needs no key.
+
+**The real run (ticket 09)** is every document against every Rule, about 22,722 calls, about $0.27 at
+the published price and 19 minutes. Each answer is stamped with when it arrived, so the report
+rebuilds from the cache with the real run's date and Jev time:
+
+```
+uv run jev-cascade --jev real --full --out out/real               # asks Jev; resumes if interrupted
+uv run jev-cascade --jev real --full --out out/real --from-cache  # the final report; no key, no calls
+```
+
+The report is reproducible from the cache, not from scratch: real Jev moves by up to 0.04 between runs
+on the same Pair. `--full` cannot be combined with `--doc` or `--rule`. `--workers N` sets how many
 calls are in flight (32 for the real client, 1 for the stub); it changes the speed, never the answers.
 
 ## Where things are

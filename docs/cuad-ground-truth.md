@@ -291,6 +291,12 @@ wall clock, none retried. Jev reported **2,019,752 input tokens**, 31.5% of the 
 so the shared Clause is billed about once a call and not once a question: $0.085 at the published
 price, not $0.27. The price is the vendor's published one; the invoice is the last check.
 
+**Read against the labels (same run).** At the fixed Cutoff of 0.5, 2,510 of 3,246 Clauses (77.3%) are
+Binned for every Rule, and 44 of the 429 Highlights are lost (10.3%; R6 alone loses 18 of 51). The
+loss-free Cutoff for all seven Rules at once is 0.03 or lower, which skips 2 Clauses. Some low scores
+on held Clauses look like label noise, not Jev: among R1's lowest-scoring short held Clauses are a
+warranty period and a limitation period that CUAD highlights under Cap On Liability. The table is in ticket 09's follow-up notes.
+
 ## Reproducing these numbers
 
 The probe scripts were throwaway. Anything here should be re-asserted as a test in the corpus loader

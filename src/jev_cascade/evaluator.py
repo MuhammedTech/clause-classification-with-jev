@@ -91,6 +91,105 @@ class RuleMetrics:
         return _share(self.holding_clauses, self.clauses)
 
 
+@dataclass(frozen=True)
+class _Ground:
+    """What does not change with the Cutoff: who holds what, and the words each Clause carries.
+
+    Worked out once per Rule. `cutoff_curve` evaluates one row per distinct P(yes), thousands of
+    them on a real run, and re-deriving which Clause holds which Highlight for every row made a full
+    run's report take longer than the run itself.
+    """
+
+    clauses: tuple[Clause, ...]
+    highlights: int
+    #: Per Clause, in order: "holding", "certified" (holds nothing, in a Certified Negative
+    #: document) or "inferred" (holds nothing, anywhere else).
+    kinds: tuple[str, ...]
+    #: Per Highlight, the indexes of the Clauses that hold it. Never empty.
+    holders: tuple[tuple[int, ...], ...]
+    total_words: int
+
+
+def _ground(
+    rule_id: str,
+    clauses: Sequence[Clause],
+    highlights: Iterable[Highlight],
+    certified_negative_docs: Collection[str],
+) -> _Ground:
+    clauses = tuple(clauses)
+    highlights = list(highlights)
+
+    holders: list[tuple[int, ...]] = []
+    for highlight in highlights:
+        held_by = tuple(i for i, c in enumerate(clauses) if holds(c, highlight))
+        if not held_by:
+            raise ValueError(
+                f"Highlight {highlight.doc_id} [{highlight.start},{highlight.end}) for rule "
+                f"{rule_id} is held by no Clause; the Clauses do not partition the document "
+                f"(ADR-0004)"
+            )
+        holders.append(held_by)
+
+    holding = {i for held_by in holders for i in held_by}
+    kinds = tuple(
+        "holding"
+        if i in holding
+        else "certified"
+        if clause.doc_id in certified_negative_docs
+        else "inferred"
+        for i, clause in enumerate(clauses)
+    )
+    return _Ground(
+        clauses=clauses,
+        highlights=len(highlights),
+        kinds=kinds,
+        holders=tuple(holders),
+        total_words=sum(c.word_count for c in clauses),
+    )
+
+
+def _at_cutoff(
+    rule_id: str, ground: _Ground, p_yes: Mapping[ClauseKey, float], cutoff: float
+) -> RuleMetrics:
+    escalated: list[bool] = []
+    for clause in ground.clauses:
+        if clause.key not in p_yes:
+            raise KeyError(f"Clause {clause.key} has no P(yes) for rule {rule_id}")
+        escalated.append(p_yes[clause.key] > cutoff)
+
+    binned_words = binned_clauses = 0
+    counts = {"holding": [0, 0], "certified": [0, 0], "inferred": [0, 0]}
+    for clause, kind, is_escalated in zip(ground.clauses, ground.kinds, escalated):
+        counts[kind][0] += 1
+        if is_escalated:
+            counts[kind][1] += 1
+        else:
+            binned_clauses += 1
+            binned_words += clause.word_count
+
+    lost_provisions = sum(
+        1 for held_by in ground.holders if not any(escalated[i] for i in held_by)
+    )
+
+    return RuleMetrics(
+        rule_id=rule_id,
+        cutoff=cutoff,
+        clauses=len(ground.clauses),
+        binned_clauses=binned_clauses,
+        escalated_clauses=len(ground.clauses) - binned_clauses,
+        holding_clauses=counts["holding"][0],
+        holding_escalated=counts["holding"][1],
+        highlights=ground.highlights,
+        lost_provisions=lost_provisions,
+        total_words=ground.total_words,
+        binned_words=binned_words,
+        certified_negative_clauses=counts["certified"][0],
+        certified_negative_escalated=counts["certified"][1],
+        inferred_negative_clauses=counts["inferred"][0],
+        inferred_negative_escalated=counts["inferred"][1],
+    )
+
+
 def evaluate_rule(
     rule_id: str,
     clauses: Sequence[Clause],
@@ -104,68 +203,8 @@ def evaluate_rule(
     A Pair whose P(yes) is at or below `cutoff` is Binned; above it, Escalated.
     `certified_negative_docs` names the documents CUAD flags `is_impossible` for this Rule.
     """
-    highlights = list(highlights)
-
-    escalated: dict[ClauseKey, bool] = {}
-    for clause in clauses:
-        if clause.key not in p_yes:
-            raise KeyError(f"Clause {clause.key} has no P(yes) for rule {rule_id}")
-        escalated[clause.key] = p_yes[clause.key] > cutoff
-
-    def is_escalated(clause: Clause) -> bool:
-        return escalated[clause.key]
-
-    total_words = sum(c.word_count for c in clauses)
-    binned_words = sum(c.word_count for c in clauses if not is_escalated(c))
-    binned_clauses = sum(1 for c in clauses if not is_escalated(c))
-
-    holding_clauses = 0
-    holding_escalated = 0
-    certified_clauses = certified_escalated = 0
-    inferred_clauses = inferred_escalated = 0
-    for clause in clauses:
-        if any(holds(clause, h) for h in highlights):
-            holding_clauses += 1
-            if is_escalated(clause):
-                holding_escalated += 1
-        elif clause.doc_id in certified_negative_docs:
-            certified_clauses += 1
-            if is_escalated(clause):
-                certified_escalated += 1
-        else:
-            inferred_clauses += 1
-            if is_escalated(clause):
-                inferred_escalated += 1
-
-    lost_provisions = 0
-    for highlight in highlights:
-        holders = [c for c in clauses if holds(c, highlight)]
-        if not holders:
-            raise ValueError(
-                f"Highlight {highlight.doc_id} [{highlight.start},{highlight.end}) for rule "
-                f"{rule_id} is held by no Clause; the Clauses do not partition the document "
-                f"(ADR-0004)"
-            )
-        if not any(is_escalated(c) for c in holders):
-            lost_provisions += 1
-
-    return RuleMetrics(
-        rule_id=rule_id,
-        cutoff=cutoff,
-        clauses=len(clauses),
-        binned_clauses=binned_clauses,
-        escalated_clauses=len(clauses) - binned_clauses,
-        holding_clauses=holding_clauses,
-        holding_escalated=holding_escalated,
-        highlights=len(highlights),
-        lost_provisions=lost_provisions,
-        total_words=total_words,
-        binned_words=binned_words,
-        certified_negative_clauses=certified_clauses,
-        certified_negative_escalated=certified_escalated,
-        inferred_negative_clauses=inferred_clauses,
-        inferred_negative_escalated=inferred_escalated,
-    )
+    ground = _ground(rule_id, clauses, highlights, certified_negative_docs)
+    return _at_cutoff(rule_id, ground, p_yes, cutoff)
 
 
 def cutoff_curve(
@@ -180,12 +219,9 @@ def cutoff_curve(
     The piles only change when the Cutoff crosses a P(yes) Jev actually gave, so these rows are the
     complete curve. Nothing is fitted and nothing is chosen: the caller reads it whole.
     """
-    highlights = list(highlights)
+    ground = _ground(rule_id, clauses, highlights, certified_negative_docs)
     observed = sorted({p_yes[clause.key] for clause in clauses if clause.key in p_yes})
-    return tuple(
-        evaluate_rule(rule_id, clauses, highlights, p_yes, observed_p_yes, certified_negative_docs)
-        for observed_p_yes in observed
-    )
+    return tuple(_at_cutoff(rule_id, ground, p_yes, cutoff) for cutoff in observed)
 
 
 @dataclass(frozen=True)

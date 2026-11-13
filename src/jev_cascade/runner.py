@@ -31,7 +31,7 @@ import time
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Callable, Iterable, Sequence
 
 from . import config
 from .domain import Clause
@@ -46,6 +46,29 @@ PairKey = tuple[str, int, int, str, str, str, str]
 PYesTable = dict[str, dict[tuple[str, str], float]]
 
 
+#: A gap between two consecutive answers longer than this is a pause (a resumed run, a closed
+#: laptop), not Jev's time. With 32 calls in flight answers arrive many a second, so a minute is far
+#: beyond anything a running call sequence produces.
+PAUSE_SECONDS = 60.0
+
+
+@dataclass(frozen=True)
+class AnswerTiming:
+    """When the answers behind a table arrived, read from the cache's per-row timestamps.
+
+    This is the **original** run's timing, recoverable on a `--from-cache` rebuild, which makes no
+    calls and so times only a file read. `active_seconds` leaves out the pauses (gaps over
+    `PAUSE_SECONDS`) between sessions of a resumed run; `longest_pause_seconds` is the longest gap
+    of any size, so a report can say when a run was resumed.
+    """
+
+    answers: int
+    first_at: float
+    last_at: float
+    active_seconds: float
+    longest_pause_seconds: float
+
+
 @dataclass(frozen=True)
 class RunStats:
     """What one run of the runner cost. Wall clock is recorded as the spec requires."""
@@ -54,6 +77,24 @@ class RunStats:
     calls_made: int
     cache_hits: int
     seconds: float
+    #: When every answer behind the table arrived, or `None` if the cache has no timestamps for
+    #: them (a cache written before ticket 09).
+    timing: AnswerTiming | None = None
+
+
+def answer_timing(stamps: Iterable[float]) -> AnswerTiming | None:
+    """Summarise answer timestamps, or `None` when there are none."""
+    ordered = sorted(stamps)
+    if not ordered:
+        return None
+    gaps = [later - earlier for earlier, later in zip(ordered, ordered[1:])]
+    return AnswerTiming(
+        answers=len(ordered),
+        first_at=ordered[0],
+        last_at=ordered[-1],
+        active_seconds=sum(gap for gap in gaps if gap <= PAUSE_SECONDS),
+        longest_pause_seconds=max(gaps, default=0.0),
+    )
 
 
 def prompt_fingerprint(parent_line: str, clause_text: str) -> str:
@@ -84,9 +125,15 @@ def read_cache(path: Path) -> dict[PairKey, float]:
     A truncated or malformed final line is skipped rather than fatal: an interruption can leave one
     half-written. A row with no `prompt_fingerprint` is skipped too, so it is a miss (ticket 10).
     """
+    return read_cache_with_stamps(path)[0]
+
+
+def read_cache_with_stamps(path: Path) -> tuple[dict[PairKey, float], dict[PairKey, float]]:
+    """Every answer on disk, and when each arrived (rows written before ticket 09 have no stamp)."""
     answers: dict[PairKey, float] = {}
+    stamps: dict[PairKey, float] = {}
     if not Path(path).exists():
-        return answers
+        return answers, stamps
 
     with Path(path).open(encoding="utf-8") as handle:
         for line in handle:
@@ -105,11 +152,13 @@ def read_cache(path: Path) -> dict[PairKey, float]:
                     row["prompt_fingerprint"],
                 )
                 answers[key] = float(row["p_yes"])
+                if "asked_at" in row:
+                    stamps[key] = float(row["asked_at"])
             except (json.JSONDecodeError, KeyError, TypeError, ValueError):
                 # A half-written line, or one written before the fingerprint existed. Either way
                 # the Pair is simply asked again.
                 continue
-    return answers
+    return answers, stamps
 
 
 def _close_dangling_line(path: Path) -> None:
@@ -129,7 +178,14 @@ def _close_dangling_line(path: Path) -> None:
         handle.write("\n")
 
 
-def _row(clause: Clause, rule: Rule, model_version: str, question_type: str, p_yes: float) -> str:
+def _row(
+    clause: Clause,
+    rule: Rule,
+    model_version: str,
+    question_type: str,
+    p_yes: float,
+    asked_at: float,
+) -> str:
     return (
         json.dumps(
             {
@@ -142,6 +198,8 @@ def _row(clause: Clause, rule: Rule, model_version: str, question_type: str, p_y
                 "prompt_fingerprint": prompt_fingerprint(clause.parent_line, clause.text),
                 "question": rule.detection_question,
                 "p_yes": p_yes,
+                # Not part of the key. It is what lets a rebuild report the run's own timing.
+                "asked_at": round(asked_at, 3),
             },
             ensure_ascii=False,
         )
@@ -156,6 +214,7 @@ def run_pairs(
     cache_path: Path,
     workers: int = 1,
     question_type: str = config.QUESTION_TYPE,
+    now: Callable[[], float] = time.time,
 ) -> tuple[PYesTable, RunStats]:
     """Ask Jev about every (Clause, Rule) Pair, skipping any already in the cache.
 
@@ -179,7 +238,7 @@ def run_pairs(
     cache_path = Path(cache_path)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
 
-    cached = read_cache(cache_path)
+    cached, stamps = read_cache_with_stamps(cache_path)
     model_version = client.model_version
     _close_dangling_line(cache_path)
 
@@ -215,12 +274,14 @@ def run_pairs(
                 first_error = first_error or error
                 del in_flight[future]
                 return
+            asked_at = now()
             cached[key] = p_yes
+            stamps[key] = asked_at
             calls_made += 1
             # Written before it leaves `in_flight`, so an error while writing cannot also make the
             # drain forget the call. Flushed per answer so an interruption loses at most the calls
             # still in flight.
-            handle.write(_row(clause, rule, model_version, question_type, p_yes))
+            handle.write(_row(clause, rule, model_version, question_type, p_yes, asked_at))
             handle.flush()
             del in_flight[future]
 
@@ -265,5 +326,8 @@ def run_pairs(
         calls_made=calls_made,
         cache_hits=cache_hits,
         seconds=time.monotonic() - started,
+        timing=answer_timing(
+            stamps[key] for key in {key for _, _, key in needed} if key in stamps
+        ),
     )
     return table, stats

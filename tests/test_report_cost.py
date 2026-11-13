@@ -1,5 +1,7 @@
 """Seam C: the report's cost and time section. Estimated from token counts; nothing is called."""
 
+import json
+
 import pytest
 
 from jev_cascade import config
@@ -105,9 +107,30 @@ def test_jev_time_is_given_measured_and_at_the_published_rate_limit(result):
     assert at_limit[1].startswith("0.83 minutes")
 
 
-def test_a_run_served_wholly_from_the_cache_reports_no_measured_time(tmp_path):
-    run(client=StubJevClient(), out_dir=tmp_path)
+def test_a_rebuild_from_the_cache_reports_the_original_runs_timing(tmp_path):
+    ticks = iter(float(n) * 0.25 for n in range(10_000))
+    first = run(client=StubJevClient(), out_dir=tmp_path, now=lambda: next(ticks))
     again = run(client=CacheOnlyJevClient(StubJevClient()), out_dir=tmp_path)
+
+    assert again.stats.calls_made == 0
+    # A quarter of a second an answer, read back from the cache's timestamps, not the rebuild's clock.
+    for result in (first, again):
+        measured = _row(_section(result.markdown, "## Cost and time"), "Jev wall clock, measured")
+        assert measured[1] == "250.0s (stub timing)"
+
+
+def test_a_cache_with_no_timestamps_reports_no_measured_time(tmp_path):
+    run(client=StubJevClient(), out_dir=tmp_path)
+    cache = tmp_path / "pyes.jsonl"
+    rows = [json.loads(line) for line in cache.read_text().splitlines()]
+    cache.write_text(
+        "".join(
+            json.dumps({k: v for k, v in row.items() if k != "asked_at"}) + "\n" for row in rows
+        )
+    )
+
+    again = run(client=CacheOnlyJevClient(StubJevClient()), out_dir=tmp_path)
+
     measured = _row(_section(again.markdown, "## Cost and time"), "Jev wall clock, measured")
     assert measured[1].startswith("n/a")
 

@@ -260,3 +260,59 @@ def test_the_question_type_is_asked_cached_and_keyed_per_run(tmp_path):
     again = CountingJevClient(StubJevClient())
     run_pairs(clauses(), [R1], again, cache, question_type="score2")
     assert again.calls == 0
+
+
+class Ticking:
+    """A clock that moves by the given steps, one per reading, so timing can be asserted exactly."""
+
+    def __init__(self, start, steps):
+        self.now = start
+        self.steps = list(steps)
+
+    def __call__(self):
+        reading = self.now
+        if self.steps:
+            self.now += self.steps.pop(0)
+        return reading
+
+
+def test_every_answer_is_stamped_with_when_it_arrived(tmp_path):
+    cache = tmp_path / "pyes.jsonl"
+    clock = Ticking(1_000.0, [1, 1, 1])
+
+    run_pairs(clauses(), [R1], StubJevClient(), cache, now=clock)
+
+    stamps = [json.loads(line)["asked_at"] for line in cache.read_text().splitlines()]
+    assert stamps == [1000.0, 1001.0, 1002.0]
+
+
+def test_a_rebuild_from_the_cache_reports_the_original_run_timing(tmp_path):
+    cache = tmp_path / "pyes.jsonl"
+    # Two answers one second apart, then a ten-minute pause, then one more answer.
+    run_pairs(clauses()[:2], [R1], StubJevClient(), cache, now=Ticking(1_000.0, [1, 1]))
+    run_pairs(clauses()[2:], [R1], StubJevClient(), cache, now=Ticking(1_600.0, [1]))
+
+    _, rebuilt = run_pairs(clauses(), [R1], CountingJevClient(StubJevClient()), cache)
+
+    assert rebuilt.calls_made == 0
+    timing = rebuilt.timing
+    assert timing.answers == 3
+    assert timing.first_at == 1_000.0
+    assert timing.last_at == 1_600.0
+    # The ten-minute pause between sessions is not Jev's time: only the one-second gap counts.
+    assert timing.longest_pause_seconds == pytest.approx(599.0)
+    assert timing.active_seconds == pytest.approx(1.0)
+
+
+def test_a_cache_with_no_timestamps_has_no_timing(tmp_path):
+    cache = tmp_path / "pyes.jsonl"
+    run_pairs(clauses(), [R1], StubJevClient(), cache)
+    stripped = [
+        json.dumps({k: v for k, v in json.loads(line).items() if k != "asked_at"})
+        for line in cache.read_text().splitlines()
+    ]
+    cache.write_text("\n".join(stripped) + "\n")
+
+    _, stats = run_pairs(clauses(), [R1], CountingJevClient(StubJevClient()), cache)
+
+    assert stats.timing is None

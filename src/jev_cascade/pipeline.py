@@ -9,9 +9,10 @@ calls and interrupt it.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 from . import config
 from .charts import write_curve_chart, write_curve_csv
@@ -92,16 +93,20 @@ def _write_curve(
 
 def run(
     client: JevClient | None = None,
-    doc_ids: Sequence[str] = TRACER_DOC_IDS,
+    doc_ids: Sequence[str] | None = TRACER_DOC_IDS,
     rule_ids: Sequence[str] = DEFAULT_RULE_IDS,
     cutoff: float = DEFAULT_CUTOFF,
     out_dir: Path | None = None,
     cuad_directory: Path | None = None,
     workers: int = 1,
+    now: Callable[[], float] = time.time,
     question_type: str = config.QUESTION_TYPE,
     heading_context: bool = config.HEADING_CONTEXT,
 ) -> RunResult:
-    """Take the documents through every stage and write the report."""
+    """Take the documents through every stage and write the report.
+
+    `doc_ids=None` is every document in the License Agreement Set.
+    """
     client = client if client is not None else StubJevClient()
     out_dir = Path(out_dir or config.DEFAULT_OUT_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -134,7 +139,7 @@ def run(
 
     cache_path = out_dir / "pyes.jsonl"
     table, stats = run_pairs(
-        clauses, rules, client, cache_path, workers=workers, question_type=question_type
+        clauses, rules, client, cache_path, workers=workers, question_type=question_type, now=now
     )
 
     metrics = tuple(

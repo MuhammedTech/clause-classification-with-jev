@@ -8,6 +8,7 @@ from pathlib import Path
 from . import config
 from .clients import KINDS, build_client, default_workers
 from .jev import JevCallRefused
+from .rulebook import RULEBOOK
 from .pipeline import DEFAULT_CUTOFF, DEFAULT_RULE_IDS, TRACER_DOC_IDS, run
 from .typesafe import JevError
 
@@ -16,8 +17,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="jev-cascade",
         description=(
-            "Tracer bullet: takes a few CUAD license agreements through every stage of the Jev "
-            "cascade on the stub client and writes a Markdown report."
+            "Takes CUAD license agreements through every stage of the Jev cascade and writes a "
+            "Markdown report. By default it runs three tracer documents on one Rule with the "
+            "stub; --full --jev real is the real run."
         ),
     )
     parser.add_argument(
@@ -33,6 +35,14 @@ def build_parser() -> argparse.ArgumentParser:
         dest="doc_ids",
         metavar="TITLE",
         help="Document to run, by JSON title. Repeatable. Defaults to the three tracer documents.",
+    )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help=(
+            "The whole run: all 53 documents against every Rule in the Rulebook. Cannot be "
+            "combined with --doc or --rule."
+        ),
     )
     parser.add_argument(
         "--cutoff",
@@ -104,6 +114,9 @@ def main(argv: list[str] | None = None) -> int:
             "CUAD_DIR to where CUAD_v1.json and master_clauses.csv live."
         )
 
+    if args.full and (args.doc_ids or args.rule_ids):
+        parser.error("--full runs every document and every Rule; drop --doc and --rule")
+
     workers = args.workers if args.workers is not None else default_workers(args.jev)
     if workers < 1:
         parser.error("--workers must be at least 1")
@@ -116,8 +129,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         result = run(
             client=client,
-            doc_ids=tuple(args.doc_ids) if args.doc_ids else TRACER_DOC_IDS,
-            rule_ids=tuple(args.rule_ids) if args.rule_ids else DEFAULT_RULE_IDS,
+            doc_ids=None if args.full else tuple(args.doc_ids) if args.doc_ids else TRACER_DOC_IDS,
+            rule_ids=(
+                tuple(r.id for r in RULEBOOK)
+                if args.full
+                else tuple(args.rule_ids) if args.rule_ids else DEFAULT_RULE_IDS
+            ),
             cutoff=args.cutoff,
             out_dir=args.out,
             workers=workers,

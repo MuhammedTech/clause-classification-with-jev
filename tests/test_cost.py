@@ -23,7 +23,7 @@ import pytest
 from jev_cascade.config import ExpensiveModel, Sourced
 from jev_cascade.cost import cost_usage, jev_time, price_usage
 from jev_cascade.domain import Clause
-from jev_cascade.runner import RunStats
+from jev_cascade.runner import AnswerTiming, RunStats
 
 CLAUSES = [
     Clause(doc_id="D", index=0, start=0, end=10, text="a b c d e f"),
@@ -180,3 +180,14 @@ def test_jev_time_is_undefined_when_every_answer_came_from_the_cache():
     timing = jev_time(stats, rules_asked=2, rate_limit_per_minute=1200)
     assert timing.seconds_per_1000_clauses is None
     assert timing.minutes_per_1000_clauses_at_rate_limit == pytest.approx(2000 / 1200)
+
+
+def test_jev_time_of_a_rebuild_is_the_original_runs_not_the_rebuilds():
+    # A rebuild made no calls and took 0.01s, but the cache says 101 answers arrived over 50 active
+    # seconds: half a second a call, so 2 Rules means 1,000 seconds per 1,000 Clauses.
+    original = AnswerTiming(
+        answers=101, first_at=0.0, last_at=50.0, active_seconds=50.0, longest_pause_seconds=0.5
+    )
+    stats = RunStats(pairs=101, calls_made=0, cache_hits=101, seconds=0.01, timing=original)
+    timing = jev_time(stats, rules_asked=2, rate_limit_per_minute=1200)
+    assert timing.seconds_per_1000_clauses == pytest.approx(1000.0)

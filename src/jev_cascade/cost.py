@@ -222,14 +222,21 @@ class JevTime:
 def jev_time(stats: RunStats, rules_asked: int, rate_limit_per_minute: float) -> JevTime:
     """Scale the runner's timing to 1,000 Clauses.
 
-    Seconds a call, times the Rules asked, times 1,000: the same arithmetic whether the run made
-    every call or only the ones missing from the cache. The runner's clock also covers the cache
-    write after each call and the cache hits, which are negligible beside a network call but are in
-    the figure.
+    Seconds a call, times the Rules asked, times 1,000. When the cache carries timestamps the
+    seconds come from them (first to last answer, pauses left out), so a report rebuilt from the
+    cache shows the real run's timing. A cache with none falls back to the runner's own clock over
+    the calls it made, which also covers the cache write after each call; that is `None` when it
+    made none, since the clock then timed a file read and not Jev.
     """
     calls = rules_asked * CLAUSES_PER_THOUSAND
     seconds = None
-    if stats.calls_made:
+    timing = stats.timing
+    if timing is not None and timing.answers > 1:
+        # The original run's own clock, read back from the cache's timestamps, so a rebuild reports
+        # the run's timing and not the file read's. N answers span N-1 gaps, and pauses between
+        # sessions are already left out.
+        seconds = timing.active_seconds / (timing.answers - 1) * calls
+    elif stats.calls_made:
         seconds = stats.seconds / stats.calls_made * calls
     return JevTime(
         calls_per_1000_clauses=calls,

@@ -13,6 +13,7 @@ behave.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Sequence
 
 from . import config
@@ -28,7 +29,7 @@ from .rulebook import (
     Rule,
     rule as lookup_rule,
 )
-from .runner import RunStats
+from .runner import PAUSE_SECONDS, AnswerTiming, RunStats
 
 
 @dataclass(frozen=True)
@@ -328,7 +329,80 @@ def _summary_section(inputs: ReportInputs) -> list[str]:
         "and the per-Rule Binned Share above does not combine into it."
     )
     lines.append("")
+    lines.extend(_net_savings_paragraph(inputs))
     return lines
+
+
+def _net_savings_paragraph(inputs: ReportInputs) -> list[str]:
+    """The money saving, beside the Fully Binned share it follows from.
+
+    Per 1,000 Clauses against the expensive model alone, for each expensive model priced, with the
+    batch price in brackets. It is an estimate from token counts at list prices: the full table and
+    its assumptions are under "Cost and time".
+    """
+    cells = []
+    for model in config.EXPENSIVE_MODELS:
+        by_batch = {
+            batch: figures for priced, batch, figures in inputs.cost.figures if priced is model
+        }
+        plain, batched = by_batch[False], by_batch[True]
+        cells.append(
+            f"{model.name} {_usd(plain.per_1000(plain.net_usd))} "
+            f"({_usd(batched.per_1000(batched.net_usd))} in batch)"
+        )
+    return [
+        "**Net savings** per 1,000 Clauses at the same Cutoff, against the expensive model alone, "
+        "after paying Jev for every Pair: " + "; ".join(cells) + ". An estimate from token counts "
+        "at list prices, so an order of magnitude and not a quote; see Cost and time.",
+        "",
+    ]
+
+
+def _utc(epoch: float) -> datetime:
+    return datetime.fromtimestamp(epoch, tz=timezone.utc)
+
+
+def _run_date_rows(timing: AnswerTiming | None) -> list[str]:
+    """When the answers were asked, read from the cache so a rebuild states the original run."""
+    if timing is None:
+        return ["| Run date | n/a (the cache holds no timestamps) |"]
+    first, last = _utc(timing.first_at), _utc(timing.last_at)
+    rows = [
+        f"| Run date | {first:%Y-%m-%d} |",
+        f"| Answers asked between | {first:%Y-%m-%d %H:%M:%S} and {last:%Y-%m-%d %H:%M:%S} UTC |",
+        f"| Time Jev was actually asking | {timing.active_seconds / 60:,.1f} minutes |",
+    ]
+    if timing.longest_pause_seconds > PAUSE_SECONDS:
+        rows.append(
+            f"| Run was resumed | yes: a pause of {timing.longest_pause_seconds / 60:,.1f} "
+            "minutes between answers, left out of the time above |"
+        )
+    return rows
+
+
+def _stub_to_real_section(inputs: ReportInputs) -> list[str]:
+    """Said once, for a real run: what changed since the stub, and what the figures rest on."""
+    if inputs.is_stub:
+        return []
+    timing = inputs.stats.timing
+    when = f"on {_utc(timing.first_at):%Y-%m-%d}" if timing is not None else "on an unrecorded date"
+    heading = "on" if inputs.heading_context else "off"
+    return [
+        "## From the stub to the real Jev",
+        "",
+        "Until ticket 07 every figure came from a stub that answered with a hash of its inputs and "
+        "carried no signal. This report is the first built on Jev itself: "
+        f"**{inputs.model_version}**, pinned and never `jev-latest`, asked {when} with question "
+        f"type **{inputs.question_type}** and heading context **{heading}**, both settled in "
+        "ticket 08. Nothing else in the pipeline changed between the stub and the real client.",
+        "",
+        "**Reproducible from the cache, not from scratch.** Every P(yes) is read from the cache this "
+        "run wrote, and this report is rebuilt from it with no call. Asking Jev again would not "
+        "give the same numbers: real Jev moved by up to 0.04 between runs on the same Pair, "
+        "without flipping any decision at 0.5, so a fresh run is expected to agree to about that "
+        "and no better.",
+        "",
+    ]
 
 
 def _usd(value: float | None) -> str:
@@ -447,7 +521,7 @@ def _cost_section(inputs: ReportInputs) -> list[str]:
     lines.append("")
     lines.append(
         "Asking Jev every Pair of the whole corpus, no expensive model, counted from the "
-        "documents with their Parent Lines. Not stub-derived: it needs no P(yes)."
+        "documents with their Parent Lines. It needs no P(yes), so it does not depend on which Jev answered."
     )
     lines.append("")
     lines.append("| | |")
@@ -713,6 +787,7 @@ def render(inputs: ReportInputs) -> str:
         )
         lines.append("")
 
+    lines.extend(_stub_to_real_section(inputs))
     lines.extend(_summary_section(inputs))
 
     lines.append("## Run")
@@ -730,6 +805,7 @@ def render(inputs: ReportInputs) -> str:
     lines.append(f"| Question type | {inputs.question_type} |")
     lines.append(f"| Heading context | {'on' if inputs.heading_context else 'off'} |")
     lines.append(f"| Model version | {inputs.model_version} |")
+    lines.extend(_run_date_rows(inputs.stats.timing))
     lines.append("")
 
     lines.extend(_how_asked_section(inputs))

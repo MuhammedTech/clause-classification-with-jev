@@ -7,8 +7,8 @@ judged against lawyer highlights.
 ## Results
 
 **Read this first: [Jev Cascade Results](https://claude.ai/artifact/3Cg59wmFZPDAt4cSS8P5xX)**, a plain-language
-walkthrough of the real run at the fixed 0.5 Cutoff, with worked examples. The Operating Point below is
-in `docs/operating-point.md`. If the link does not open for you, ask the owner to share it; the same
+walkthrough of the real run with a worked example, leading with the Operating Point below (the full
+tables are in `docs/operating-point.md`). If the link does not open for you, ask the owner to share it; the same
 numbers are in the report that `--from-cache` rebuilds (see Running).
 
 The real run was all 53 license agreements against seven Rules (3,246 Clauses, `jev-1.14.0`). The

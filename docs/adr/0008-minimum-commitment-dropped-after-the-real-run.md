@@ -17,13 +17,55 @@ independence, which is R4's ground. It is out for two reasons that are both abou
    other Rule. Alone, R1, R2, R3, R5 and R8 could each skip 87 to 98% of Clauses within 2% of their own
    marked provisions lost, and R7 81%; Minimum Commitment could skip only 50% (full-data readings, not
    held out, made while diagnosing).
-2. **Its labels could not be checked.** Some of the Highlights Jev missed read as technical performance
-   requirements ("fewer than 1 talkoff in 5 hours of voice", in the SUMMAFOUR licence) rather than
-   purchase or payment commitments, so they look like label noise. There is no lawyer to say, and no
-   more data to set against them.
+2. **Its labels could not be checked** (this was the reason as given at the time; see "Checked
+   afterwards" below, which shows it was only partly true). Some of the Highlights Jev missed read as
+   technical performance requirements ("fewer than 1 talkoff in 5 hours of voice", in the SUMMAFOUR
+   licence) rather than purchase or payment commitments, so they look like label noise. There is no
+   lawyer to say, and no more data to set against them.
 
 The user decided this with that information in hand: there is no lawyer and no more data, and this
 was the Rule causing the trouble.
+
+## Checked afterwards (2026-11-14): the reason above was incomplete
+
+The decision was made after looking closely at one document (SUMMAFOUR). Every one of the 51 Highlights
+was read afterwards, against CUAD's own text and the cached answers in `out/real/pyes.jsonl`. A
+Highlight counts as lost when the highest P(yes) over the Clauses holding it is 0.5 or below, which
+reproduces the 18 of 51. These are full-data readings at the fixed 0.5 Cutoff, not held out.
+
+Of the 18 lost Highlights:
+
+- **5 are labels that are wrong on any reading.** All five are in SUMMAFOUR, a phone-tone-detector
+  licence: technical tables (columns headed "Minimum Maximum Unit"), a "Minimum response time" table
+  and "fewer than 1 talkoff in 5 hours of voice (minimum tone duration 400 ms)". Jev scored them 0.04
+  to 0.05. None is a commitment to buy, pay or deliver anything. This needed reading, not a lawyer.
+- **13 are minimum targets or obligations that the question did not ask about.** Coherus 3, CytoDyn 3,
+  Ehave 2, Glu Mobile 2, and one each in MusclePharm, Euromedia and SUMMAFOUR (a minimum of five years of
+  support). Examples: annual revenue of $500,000 below which exclusivity ends, market-penetration
+  targets, "at least fifty (50) signed items for each Contract Year", "not less than ten (10) Licensed
+  Programs". CUAD's lawyers marked these. The Detection Question was "Does this clause commit a party to
+  a minimum purchase, payment or volume?", narrower than what was marked. CUAD's own question for the
+  category is narrower still ("minimum order size or minimum amount or units per-time period that one
+  party must buy"), and the lawyers' marks are broader than that too, so the label itself is loose.
+  Several are fragments ("Licensee commits to:", "CytoDyn shall have the right to terminate ... on the
+  occurrence of any of the following:") whose figures sit in the next Clause, which Jev never saw.
+- **Jev did well on what the question did ask about.** 33 of the 51 Highlights score above 0.5, mostly
+  minimum royalties and guaranteed payments (0.59 to 0.92).
+
+What this changes about the reasons above:
+
+- **Reason 2 stands only for 5 of the 18.** Those are label noise. The other 13 are a mismatch between a
+  narrow question and loosely drawn labels, which is a Rulebook problem, not a ground-truth problem.
+- **Label noise does not explain the result.** With the 5 wrong labels set aside, R6 still loses 13 of
+  46 Highlights at 0.5 (28%), still more than any other Rule (R7 loses 8, R8 6).
+- **Reason 1 is mostly the question's wording.** "Jev could not separate it" is true of this question,
+  not shown for the category.
+- **Rewording was not tried.** ADR-0005 said that if R2 or R6 trailed, splitting or rewording them was
+  the first thing to try. That was not done before R6 was dropped, and re-asking one Rule would cost
+  cents (the whole seven-question run cost $0.085). R6 was dropped, not fixed.
+
+The decision stands as made and the figures over six Rules stay post-hoc and more favourable than a
+Rule set fixed in advance. Whether to reword R6 and bring it back is open and is the user's call.
 
 ## What this changes, said plainly
 
@@ -82,9 +124,12 @@ Both budgets are chosen on one half of the documents and read on the other, both
 
 ## Considered and rejected
 
-- **Keeping R6 and declaring the SUMMAFOUR highlights label noise.** That needs a lawyer to say they
-  are noise. Without one it is a guess, and it would be a second after-the-fact rescue of the result,
-  on top of the removal this ADR already records.
+- **Keeping R6 and declaring the SUMMAFOUR highlights label noise.** At the time this was judged to need
+  a lawyer. Reading them later shows 5 of them are not commitments on any reading (see "Checked
+  afterwards"), but setting them aside would still be an after-the-fact rescue of the result, and R6
+  would still lose 13 of 46.
+- **Rewording or splitting R6's question.** Not considered when R6 was dropped; ADR-0005 named it as the
+  first remedy. See "Checked afterwards".
 - **Dropping R7 as well.** See above: it leads the losses and is the user's call, not made here, and a
   second removal after seeing results would weaken the figures further.
 - **Re-asking Jev with six questions.** Possible and cheap (the seven-question run cost $0.085), but it would add a third

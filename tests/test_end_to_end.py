@@ -145,7 +145,7 @@ def _gate_rows(markdown: str) -> dict[str, str]:
     return rows
 
 
-def test_the_report_shows_all_seven_rules_with_their_counts_and_a_passing_gate(tmp_path):
+def test_the_report_shows_all_six_rules_with_their_counts_and_a_passing_gate(tmp_path):
     markdown = run(client=StubJevClient(), out_dir=tmp_path).markdown
 
     assert "## Rulebook" in markdown
@@ -154,7 +154,7 @@ def test_the_report_shows_all_seven_rules_with_their_counts_and_a_passing_gate(t
         assert rule_.detection_question in markdown, rule_.id
 
     rows = _gate_rows(markdown)
-    assert sorted(rows) == ["R1", "R2", "R3", "R5", "R6", "R7", "R8"]
+    assert sorted(rows) == ["R1", "R2", "R3", "R5", "R7", "R8"]
     for rule_id, row in rows.items():
         assert row.rstrip().endswith("| pass |"), row
     # Full-corpus counts, not the tracer subset: R8 at 41 documents and 85 Highlights.
@@ -189,11 +189,23 @@ def test_the_report_gives_the_corrected_reason_uncapped_liability_was_dropped(tm
     assert "the gate is not a reason to drop this Rule" in markdown
     assert "superseded" in markdown
     # The report gives exactly the ground ADR-0005 still stands behind, and being compound is not
-    # part of it: R2 and R6 were compound too and survive. Asserted on the reason itself rather
-    # than on the whole report, because ticket 05 must be free to state the cost of asking R2 and
-    # R6 a blunter question (ADR-0005: "the cost is real and should be stated in the report").
+    # part of it: R2 was compound too and survives. Asserted on the reason itself rather than on
+    # the whole report, because ticket 05 must be free to state the cost of asking R2 a blunter
+    # question (ADR-0005: "the cost is real and should be stated in the report").
     assert "compound" not in DROPPED_REASONS["R4"]
     assert DROPPED_REASONS["R4"] in markdown
+
+
+def test_the_report_says_plainly_that_minimum_commitment_was_dropped_after_the_real_run(tmp_path):
+    markdown = run(client=StubJevClient(), out_dir=tmp_path).markdown
+
+    assert "Minimum Commitment" in markdown
+    # Dropped, so never asked as a Rule: no scored section and no row in the gate table.
+    assert "## R6" not in markdown
+    assert "R6" not in _gate_rows(markdown)
+    # The report must carry the admission, not only the reason: the choice was made knowing the result.
+    assert DROPPED_REASONS["R6"] in markdown
+    assert "after the real run" in markdown
 
 
 def test_the_report_warns_that_r5_and_r8_changed_meaning(tmp_path):

@@ -23,6 +23,7 @@ from .evaluator import FreeSaving, FullyBinned, RuleMetrics
 from .partition import PartitionFacts
 from .rulebook import (
     DROPPED_REASONS,
+    DROPPED_RULES,
     REPLACED_RULES,
     RULEBOOK,
     SUPERSEDED_GATE_COUNTS,
@@ -109,7 +110,7 @@ def _corpus_section(corpus: CorpusFacts) -> list[str]:
         "",
         f"Graded text is the JSON `context`, the same string the Highlight offsets are measured "
         f"against: **{corpus.documents} documents**, {corpus.characters:,} characters, "
-        f"{corpus.highlights} Highlights across the seven Rules. Every one of those offsets lands "
+        f"{corpus.highlights} Highlights across the {_number_word(len(corpus.gate))} Rules. Every one of those offsets lands "
         "exactly on the text it marks, so character-range overlap is a sound label (ADR-0004).",
         "",
     ]
@@ -123,6 +124,14 @@ def _margin_phrase(count: RuleCounts) -> str:
     return " by one Highlight" if margin == 1 else f" by {margin} Highlights"
 
 
+_NUMBER_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
+
+
+def _number_word(n: int) -> str:
+    """A small count in words, so the prose follows the Rulebook instead of a remembered number."""
+    return _NUMBER_WORDS.get(n, str(n))
+
+
 def _dropped_rule_paragraph(count: RuleCounts, corpus_documents: int) -> list[str]:
     """One dropped Rule: what it measures now, what ADR-0005 recorded, and why it stays out.
 
@@ -132,10 +141,20 @@ def _dropped_rule_paragraph(count: RuleCounts, corpus_documents: int) -> list[st
     was = SUPERSEDED_GATE_COUNTS.get(count.rule_id)
     reason = DROPPED_REASONS.get(count.rule_id, "")
 
+    asked_before = next((r.detection_question for r in DROPPED_RULES if r.id == count.rule_id), "")
+    if asked_before:
+        status = (
+            "It is absent from the Rulebook and no longer asked. It was asked in the real run as "
+            f'_"{asked_before}"_, and those answers stay in the cache, unread.'
+        )
+    else:
+        status = (
+            "It is absent from the Rulebook and never asked, and it has no Detection Question: "
+            "wording is drafted only for Rules that are asked."
+        )
     lines = [
-        f"**Dropped: {count.cuad_category} ({count.rule_id}).** It is absent from the Rulebook and "
-        f"never asked, and it has no Detection Question: wording is drafted only for Rules that "
-        f"are asked. Over all {corpus_documents} documents it measures "
+        f"**Dropped: {count.cuad_category} ({count.rule_id}).** {status} "
+        f"Over all {corpus_documents} documents it measures "
         f"**{count.documents_with_highlights} documents and {count.highlights} Highlights**, "
         f"which {'passes' if count.passes_gate else 'fails'} the gate{_margin_phrase(count)}."
     ]
@@ -149,18 +168,24 @@ def _dropped_rule_paragraph(count: RuleCounts, corpus_documents: int) -> list[st
         )
     if reason:
         lines.append("")
-        lines.append(f"It stays dropped on the ground that survives the correction. {reason}")
+        lead = (
+            "It stays dropped on the ground that survives the correction."
+            if was is not None
+            else "Why it is out:"
+        )
+        lines.append(f"{lead} {reason}")
     lines.append("")
     return lines
 
 
 def _rulebook_section(corpus: CorpusFacts) -> list[str]:
-    """The seven Rules, their ground-truth counts, the gate, and what was dropped and renamed."""
+    """The Rules asked, their ground-truth counts, the gate, and what was dropped and renamed."""
     lines = [
         "## Rulebook and the gate",
         "",
-        "Seven Rules, each mapped to one CUAD category and asked as one positively phrased "
-        "Detection Question (ADR-0005). The **gate** asks for at least "
+        f"{_number_word(len(corpus.gate)).capitalize()} Rules, each mapped to one CUAD category and "
+        "asked as one positively phrased Detection Question (ADR-0005, ADR-0008). The **gate** asks "
+        "for at least "
         f"{GATE_MIN_DOCUMENTS} documents carrying a Highlight and at least "
         f"{GATE_MIN_HIGHLIGHTS} Highlights; below either, the denominators are too thin to read a "
         "curve off.",
@@ -182,7 +207,7 @@ def _rulebook_section(corpus: CorpusFacts) -> list[str]:
         )
     lines.append("")
     lines.append(
-        f"{'All seven Rules pass' if corpus.gate_passes else 'Not every Rule passes'} the gate. "
+        f"{'All ' + _number_word(len(corpus.gate)) + ' Rules pass' if corpus.gate_passes else 'Not every Rule passes'} the gate. "
         "A Certified Negative document is one CUAD flags as having no such clause anywhere, so "
         "every Clause in it is a verified negative for that Rule."
     )

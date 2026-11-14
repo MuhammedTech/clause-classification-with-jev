@@ -7,6 +7,9 @@ from typing import Sequence
 
 from . import config
 from .operating_point import Study, calls_saved, dollars
+from .rulebook import DROPPED_RULES, RULEBOOK
+
+_NUMBER_WORDS = {3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
 
 
 @dataclass(frozen=True)
@@ -20,6 +23,28 @@ class OperatingPointInputs:
     fixed_skipped_share: float
     fixed_lost: int
     fixed_provisions: int
+
+
+def _rules_in_words() -> str:
+    return _NUMBER_WORDS.get(len(RULEBOOK), str(len(RULEBOOK)))
+
+
+def _rule_set_bullet() -> str:
+    """The admission that the Rule set was changed after results were seen, one line per dropped
+    Rule that was dropped for performance rather than independence. Generated from the Rulebook so
+    it cannot name a Rule that is back in, or miss one that has gone."""
+    after_run = [r for r in DROPPED_RULES if r.detection_question]
+    if not after_run:
+        return ""
+    names = ", ".join(f"{r.cuad_category} ({r.id})" for r in after_run)
+    return (
+        f"- **The Rule set was changed after the results were seen.** {names} was removed after the "
+        "real run, because Jev separated it worst and its marked Provisions could not be checked: "
+        "there is no lawyer and there is no more data. This departs from the Rules agreed beforehand "
+        "and makes every figure on this page more favourable than a Rule set fixed in advance. The "
+        "Cutoff is still chosen on one half and read on the other, but the Rule set is not held out. "
+        "See ADR-0008 for the same run over all seven Rules."
+    )
 
 
 def _pct(share: float) -> str:
@@ -85,7 +110,7 @@ def render_operating_point(inputs: OperatingPointInputs) -> str:
     out.append("")
     out.append(
         f"{inputs.documents} documents, {inputs.clauses:,} Clauses, {inputs.provisions} lawyer-marked "
-        f"Provisions, seven Rules, `{inputs.model_version}`. Read from the stored answers; nothing is asked of Jev."
+        f"Provisions, {_rules_in_words()} Rules, `{inputs.model_version}`. Read from the stored answers; nothing is asked of Jev."
     )
     out.append("")
     out.append("## Why this exists")
@@ -105,7 +130,7 @@ def render_operating_point(inputs: OperatingPointInputs) -> str:
         "1. Split the documents in two by a hash of the document id. No random generator, so the split is the same every time."
     )
     out.append(
-        "2. On the **Selection Half**, take the highest Cutoff, **one shared by all seven Rules**, at which "
+        "2. On the **Selection Half**, take the highest Cutoff, **one shared by all {_rules_in_words()} Rules**, at which "
         "the Provisions Lost stay within the **Loss Budget**, a share of that half's Provisions."
     )
     out.append("3. Apply that Cutoff to the **Report Half** and read the skip, the loss and the cost there.")
@@ -171,13 +196,10 @@ def render_operating_point(inputs: OperatingPointInputs) -> str:
         "exactly sits at the edge of that half's data, so on the other half it can lose more or less. The two "
         "directions above show by how much."
     )
+    out.append(_rule_set_bullet())
     out.append(
-        "- **One document decides it, and its labels look wrong.** The lowest safe Cutoff is set by the "
-        "weakest Rules, Minimum Commitment above all. The Minimum Commitment losses at Cutoffs of 0.05 and "
-        "below are five Clauses of the SUMMAFOUR software licence, which are technical performance "
-        "requirements (for example \"fewer than 1 talkoff in 5 hours of voice\"), not purchase or payment "
-        "commitments. Read by hand on 14 Nov 2026. If those highlights are label noise, the losses here are "
-        "overstated and the safe Cutoff is higher."
+        "- **A few documents decide it.** Read the tables above: the losses sit in a handful of "
+        "contracts, so another sample of contracts could move the figure a long way."
     )
     out.append(
         "- **One shared Cutoff.** Per-Rule Cutoffs were tried while designing this and are not used: see ADR-0007."

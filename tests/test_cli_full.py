@@ -38,7 +38,8 @@ def test_full_asks_for_every_document_and_every_rule(captured, tmp_path):
 
     assert captured["doc_ids"] is None  # None is the whole License Agreement Set
     assert captured["rule_ids"] == tuple(rule.id for rule in RULEBOOK)
-    assert len(captured["rule_ids"]) == 7
+    assert captured["rule_ids"] == ("R1", "R2", "R3", "R5", "R7", "R8")
+    assert "R6" not in captured["rule_ids"]  # dropped after the real run (ADR-0008)
 
 
 def test_without_full_the_command_is_still_the_three_document_tracer(captured, tmp_path):

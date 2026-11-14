@@ -6,7 +6,7 @@ Three guarantees are asserted here (ticket 03):
 - no Clause exceeds the word ceiling;
 - no Highlight, for any Rule in the Rulebook, is held by zero Clauses.
 
-The share of Highlights inside one Clause (about 97% of 429) is **reported, not asserted**: ADR-0004
+The share of Highlights inside one Clause (about 97% of 378) is **reported, not asserted**: ADR-0004
 says it is what the data naturally gives and not a build gate, since gating on it would pressure the
 Splitter to stop separating sub-items.
 """
@@ -26,7 +26,7 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="module")
 def partitioned():
-    """Every document of the License Agreement Set, split once, with all seven Rules' Highlights."""
+    """Every document of the License Agreement Set, split once, with all six Rules' Highlights."""
     documents = load_corpus()
     return [(document, split_document(document.doc_id, document.text)) for document in documents]
 
@@ -75,7 +75,7 @@ def test_no_highlight_is_held_by_zero_clauses_for_any_rule(partitioned):
             holders = [c for c in clauses if holds(c, highlight)]
             assert holders, (document.doc_id, highlight.rule_id, highlight.start, highlight.end)
             checked += 1
-    assert checked == 429
+    assert checked == 378  # 429 over seven Rules, less R6's 51 (ADR-0008)
 
 
 def test_clauses_are_numbered_in_reading_order_in_every_document(partitioned):

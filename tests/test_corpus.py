@@ -18,7 +18,7 @@ from jev_cascade.corpus import (
     join_key,
     load_corpus,
 )
-from jev_cascade.rulebook import RULEBOOK, SUPERSEDED_GATE_COUNTS, Rule, rule
+from jev_cascade.rulebook import DROPPED_REASONS, RULEBOOK, SUPERSEDED_GATE_COUNTS, Rule, rule
 
 pytestmark = pytest.mark.skipif(
     not config.cuad_is_available(),
@@ -55,7 +55,7 @@ def test_the_corpus_loads_exactly_53_documents_including_pacira():
 
 
 def test_every_highlight_offset_lands_exactly_on_its_answer_text():
-    # All 429 spans across the seven Rules, so character-range overlap is a sound label (ADR-0004).
+    # All 378 spans across the six Rules (429 over seven, less R6's 51: ADR-0008), so character-range overlap is a sound label (ADR-0004).
     documents = load_corpus()
     checked = 0
     for document in documents:
@@ -63,7 +63,7 @@ def test_every_highlight_offset_lands_exactly_on_its_answer_text():
             assert document.text[highlight.start : highlight.end] == highlight.text
             assert "<omitted>" not in highlight.text
             checked += 1
-    assert checked == 429
+    assert checked == 378
 
 
 def test_certified_negative_documents_carry_no_highlights_for_that_rule():
@@ -144,7 +144,6 @@ def test_the_gate_counts_match_the_measured_per_rule_table():
         "R2": (26, 76, 27),
         "R3": (22, 33, 31),
         "R5": (24, 58, 29),
-        "R6": (17, 51, 36),
         "R7": (20, 44, 33),
         "R8": (41, 85, 12),
     }
@@ -154,7 +153,7 @@ def test_the_gate_counts_match_the_measured_per_rule_table():
         for c in counts
     }
     assert measured == expected
-    assert sum(c.highlights for c in counts) == 429
+    assert sum(c.highlights for c in counts) == 378
 
 
 def test_every_rule_accounts_for_all_53_documents():
@@ -171,7 +170,7 @@ def test_the_corpus_facts_match_the_measured_corpus_size():
     # From `docs/cuad-ground-truth.md`: the 53 contexts hold 2,990,822 characters, of which
     # Pacira is 145,168 — the 2,845,654 recorded before it joined.
     assert (facts.documents, facts.characters) == (53, 2990822)
-    assert facts.highlights == 429
+    assert facts.highlights == 378
     assert facts.gate_passes
 
 
@@ -179,8 +178,9 @@ def test_the_dropped_rule_now_passes_the_gate_and_is_still_absent():
     # ADR-0005 dropped Uncapped Liability as the only Rule failing the gate, measured at 16
     # documents and 23 spans before Pacira joined. On all 53 it is 17 and 26, one span over the
     # gate, so the standing reason is independence from R1 and the counts must say so.
-    (dropped,) = corpus_facts().dropped
-    assert dropped.rule_id == "R4"
+    dropped_rules = {d.rule_id: d for d in corpus_facts().dropped}
+    assert sorted(dropped_rules) == ["R4", "R6"]
+    dropped = dropped_rules["R4"]
     assert (dropped.documents_with_highlights, dropped.highlights) == (17, 26)
     assert dropped.certified_negative_documents == 36
     assert dropped.passes_gate
@@ -195,8 +195,24 @@ def test_the_dropped_rule_now_passes_the_gate_and_is_still_absent():
     assert dropped.cuad_category == "Uncapped Liability"
     # Dropped means never asked.
     assert "R4" not in [r.id for r in RULEBOOK]
-    with pytest.raises(KeyError, match="dropped in ADR-0005"):
+    with pytest.raises(KeyError, match="dropped"):
         rule("R4")
+
+
+def test_minimum_commitment_is_dropped_after_the_real_run_and_its_counts_stay_recorded():
+    # ADR-0008: R6 passes the gate comfortably, so it is not out for the gate. It is out because
+    # Jev could not separate it and its Highlights could not be checked, and that was decided
+    # after its results were seen. Its measured counts stay on record.
+    dropped = {d.rule_id: d for d in corpus_facts().dropped}["R6"]
+    assert dropped.cuad_category == "Minimum Commitment"
+    assert (dropped.documents_with_highlights, dropped.highlights) == (17, 51)
+    assert dropped.certified_negative_documents == 36
+    assert dropped.passes_gate
+    assert "R6" not in [r.id for r in RULEBOOK]
+    assert "after the real run" in DROPPED_REASONS["R6"]
+    assert "ADR-0008" in DROPPED_REASONS["R6"]
+    with pytest.raises(KeyError, match="dropped"):
+        rule("R6")
 
 
 def test_the_backup_rules_counts_stay_recorded():
@@ -212,12 +228,12 @@ def test_the_backup_rules_counts_stay_recorded():
     assert counts == {"AR": (29, 92), "IP": (17, 52)}
 
 
-def test_all_seven_rules_pass_the_gate():
+def test_all_six_rules_pass_the_gate():
     # The gate's thresholds are written out rather than imported, so a Rule that only passes
     # because someone lowered `GATE_MIN_*` fails here. ADR-0005: at least 15 documents with a
     # Highlight and at least 25 Highlights.
     counts = gate_counts()
-    assert [c.rule_id for c in counts] == ["R1", "R2", "R3", "R5", "R6", "R7", "R8"]
+    assert [c.rule_id for c in counts] == ["R1", "R2", "R3", "R5", "R7", "R8"]
     for count in counts:
         assert count.documents_with_highlights >= 15, count.rule_id
         assert count.highlights >= 25, count.rule_id

@@ -87,3 +87,12 @@ the seven Rulebook rules read as in the table in `docs/cuad-ground-truth.md`.
 
 If the user wants R4 back, the gate no longer blocks it; the independence problem and ticket 08's
 wording work are what to weigh.
+
+## Amended 2026-11-14: R6 is dropped too
+
+After the real run, **Minimum Commitment (R6) was removed**, knowing how it performed and with no
+lawyer or further data to check its labels. The Rulebook now holds six Rules, and the table above is
+the Rule set that was agreed, not the one now asked. See
+[ADR-0008](0008-minimum-commitment-dropped-after-the-real-run.md), which says plainly that this departs
+from the agreement and makes the six-Rule figures more favourable than a Rule set fixed in advance.
+The title of this ADR is left as it was, since the other ADRs and the glossary link to its file name.

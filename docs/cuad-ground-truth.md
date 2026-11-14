@@ -91,7 +91,7 @@ computed; its numbers are kept in the right-hand column so the correction is vis
 | R5 | Exclusivity | 24 | 58 | 29 | pass | 23 / 55 / 29 |
 | R3 | Termination For Convenience | 22 | 33 | 31 | pass | 21 / 30 / 31 |
 | R7 | Change Of Control | 20 | 44 | 33 | pass | 19 / 39 / 33 |
-| R6 | Minimum Commitment | 17 | 51 | 36 | pass | 17 / 51 / 35 |
+| R6 | Minimum Commitment (dropped after the real run, ADR-0008) | 17 | 51 | 36 | pass | 17 / 51 / 35 |
 | — | Uncapped Liability (dropped) | 17 | 26 | 36 | **pass** | 16 / 23 / 36 |
 | — | Audit Rights (backup) | 29 | 92 | 24 | pass | 28 / 86 / 24 |
 | — | IP Ownership Assignment (backup) | 17 | 52 | 36 | pass | 16 / 45 / 36 |
@@ -296,6 +296,11 @@ Binned for every Rule, and 44 of the 429 Highlights are lost (10.3%; R6 alone lo
 loss-free Cutoff for all seven Rules at once is 0.03 or lower, which skips 2 Clauses. Some low scores
 on held Clauses look like label noise, not Jev: among R1's lowest-scoring short held Clauses are a
 warranty period and a limitation period that CUAD highlights under Cap On Liability. The table is in ticket 09's follow-up notes.
+
+> **Record, not current (ADR-0008, 2026-11-14).** The paragraph above is the seven-Rule run. R6 was
+> then dropped after its results were seen. Over the six Rules now asked, the same 0.5 Cutoff Bins 2,547 of
+> 3,246 Clauses (78.5%) and loses 26 of 378 Highlights (6.9%). The 429 Highlights counted elsewhere on
+> this page are the seven-Rule total; the six-Rule total is 378.
 
 ## Reproducing these numbers
 

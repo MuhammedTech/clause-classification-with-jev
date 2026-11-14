@@ -11,24 +11,28 @@ walkthrough of the real run with a worked example, leading with the Operating Po
 tables are in `docs/operating-point.md`). If the link does not open for you, ask the owner to share it; the same
 numbers are in the report that `--from-cache` rebuilds (see Running).
 
-The real run was all 53 license agreements against seven Rules (3,246 Clauses, `jev-1.14.0`). The
-question is how much Jev can skip, and the answer depends on how many lawyer-marked provisions you will
-let it lose:
+The real run was all 53 license agreements against seven Rules (3,246 Clauses, `jev-1.14.0`). **Minimum
+Commitment was then dropped after its results were seen**: there is no lawyer to check its labels and no
+more data. That departs from the Rule set agreed with the reviewer and makes the figures below, which are
+over the six Rules left, more favourable than a Rule set fixed in advance. The seven-Rule figures are kept
+beside them in ADR-0008. The question is how much Jev can skip, and the answer depends on how many
+lawyer-marked provisions you will let it lose:
 
-- **At a loss a legal reader would accept (up to 2% of marked provisions): Jev skips about 1 Clause in 5
-  (20.5%)** and loses 7 of 429 provisions (1.6%). At 1% it skips only 7.7% and loses 5 (1.2%, so just over
-  the budget). The Cutoff for each was chosen on one half of the documents and read on the other, both ways
-  round: `docs/operating-point.md`.
-- **Cost, per 1,000 Clauses against sending everything to Claude Sonnet 5.5:** about $4.23 saved of $8.15
-  at the 2% budget (an estimate: the expensive model was never run, and that figure rests on an assumed
-  answer length; counting only the reading, the saving is about $0.18, or 16%).
-- **At a fixed Cutoff of 0.5, Jev skips 77.3% of Clauses but loses 44 of 429 provisions (10.3%).** That is
-  the other end of the same curve, and too much loss for a legal team. Never quote the 77% without the 10%.
-- **The answer is unstable.** The two halves disagree widely, and 5 of the 7 provisions lost at the 2% budget
-  are in one document whose Minimum Commitment highlights look like label noise (software performance
-  specs, not purchase commitments). That is the main limitation.
-- Five Rules catch 92 to 94% of lawyer-marked Clauses at 0.5; Minimum Commitment catches 60% and Change Of
-  Control 75%.
+- **At a loss a legal reader would accept (aimed for 1% of marked provisions, got 1.1%): Jev skips about 1
+  Clause in 3 (31.5%)** and loses 4 of 378 provisions. The Cutoff was chosen on one half of the documents
+  and read on the other, both ways round: `docs/operating-point.md`. For the agreed seven Rules the same
+  procedure at a 2% budget skipped 20.5% and lost 7 of 429 (1.6%).
+- **The 2% budget did not hold over six Rules:** 64.6% skipped, but 4.2% lost (6.4% on the worse half).
+  Do not quote that 64.6% without the loss beside it.
+- **Cost, per 1,000 Clauses against sending everything to Claude Sonnet 5.5:** about $4.68 saved of $7.11
+  at the 1% budget (an estimate: the expensive model was never run, and that figure rests on an assumed
+  answer length; counting only the reading, the saving is about $0.28, or 25%). The baseline is lower than
+  the seven-Rule $8.15 only because Claude is asked six questions; that is not a saving.
+- **At a fixed Cutoff of 0.5, Jev skips 78.5% of Clauses but loses 26 of 378 provisions (6.9%).** That is
+  the other end of the same curve, and too much loss for a legal team. Never quote the 78% without the 7%.
+- **The answer is unstable.** Which half chooses the Cutoff moves the skip from 14.6% to 51.0% at the 1%
+  budget, and the losses sit in few documents (2 of the 4 are in one). That is the main limitation.
+- Five Rules catch 92 to 94% of lawyer-marked Clauses at 0.5; Change Of Control catches 75%.
 
 Start with `GLOSSARY.md` for the vocabulary, `.scratch/jev-cascade/spec.md` for the method, and
 `docs/cuad-ground-truth.md` for what has already been measured about the data.
@@ -83,7 +87,7 @@ calls are in flight (32 for the real client, 1 for the stub); it changes the spe
 | `config.py` | The CUAD path, the output directory, prices and cost assumptions, each with its source and date |
 | `corpus.py` | The 53-document License Agreement Set, the join, the Highlights, and the gate |
 | `splitter.py` | Partitioning a document into Clauses |
-| `rulebook.py` | The seven Rules and their Detection Questions (ADR-0005) |
+| `rulebook.py` | The six Rules and their Detection Questions (ADR-0005; R6 dropped, ADR-0008) |
 | `jev.py` | The Jev client interface and the deterministic seeded stub |
 | `typesafe.py`, `clients.py` | The real Jev client (retries, rate spacing, pinned model) and the choice between it and the stub |
 | `runner.py` | Asking every Pair once, and the JSONL P(yes) cache |
@@ -111,12 +115,12 @@ uv run jev-cascade-sample --jev real --from-cache   # rebuild the report, no key
 
 ## Status
 
-Tickets 01 to 09, 11 and 12 are built. The real run is done: all 53 documents against all seven Rules,
-22,722 Pairs in 3,246 fan-out calls, `jev-1.14.0`, 179 s, $0.085 as Jev reported it. The default
+Tickets 01 to 09, 11 and 12 are built. The real run is done: all 53 documents against all seven Rules
+(Minimum Commitment dropped afterwards, ADR-0008), 22,722 Pairs in 3,246 fan-out calls, `jev-1.14.0`, 179 s, $0.085 as Jev reported it. The default
 command still uses the signal-free stub (its figures carry no signal), so the real report is the one
 built with `--jev real --full --out out/real`, and it is reproducible from the cache, not from scratch.
-The report's Corpus and Rulebook sections are counted from CUAD over all 53 documents: the seven
-Rules with their document and span counts, and the gate, which all seven pass.
+The report's Corpus and Rulebook sections are counted from CUAD over all 53 documents: the six
+Rules with their document and span counts, and the gate, which all six pass.
 
 Each ticket in `.scratch/jev-cascade/issues/` deepened one stage: 03 the Splitter, 04 and 05 the
 metrics and the Cutoff Curve, 06 cost and time, 07 the real Jev client, 08 the question type and

@@ -39,6 +39,12 @@ At the 2% budget: 20.5% of Clauses skipped and 7 of 429 Provisions lost (1.6%). 
 lost at the 2% budget are in one document whose Minimum Commitment highlights look like label noise.
 `docs/operating-point.md` has the tables.
 
+> **Update 2026-11-14.** These figures are for seven Rules, the agreed Rule set. Minimum Commitment was
+> then dropped after the real run and the Operating Point re-read over six Rules, with a different
+> answer (1% budget: 31.5% skipped, 1.1% lost; the 2% budget no longer holds, at 4.2% lost). See
+> [ADR-0008](0008-minimum-commitment-dropped-after-the-real-run.md). The "dropping the Rule that decides
+> the Cutoff" item under *Considered and rejected* was reversed there, on the user's decision.
+
 ## Considered and rejected
 
 - **Per-Rule Cutoffs**, each at its Free Saving point on the Selection Half (lose nothing there). Tried

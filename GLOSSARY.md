@@ -47,11 +47,13 @@ _Avoid_: lead-in, header, intro, stem
 ### Rules and labels
 
 **Rule**:
-One of the Rulebook's seven detection questions about a Clause, each mapped to one CUAD category.
+One of the Rulebook's detection questions about a Clause, each mapped to one CUAD category.
 _Avoid_: check, criterion, category (when meaning the rule)
 
 **Rulebook**:
-The fixed set of seven Rules the experiment scores.
+The fixed set of Rules the experiment scores: six now (R1, R2, R3, R5, R7, R8). Seven were agreed;
+Minimum Commitment (R6) was dropped after the real run, knowing how it performed. See
+[ADR-0008](docs/adr/0008-minimum-commitment-dropped-after-the-real-run.md).
 
 **Gate**:
 The minimum ground truth a Rule needs to be worth asking: at least 15 documents carrying a
@@ -139,10 +141,11 @@ One Clause judged against one Rule; the unit every outcome is counted on.
 **Fan-out**:
 Asking Jev every Rule's question about a Clause in **one call**: the Clause is sent once and each
 question is answered separately, under its own id. A full run is 3,246 calls (one per Clause) for
-22,722 Pairs, and the cache still holds one row per Pair. See
+22,722 Pairs (seven questions each, as the run was made), and the cache still holds one row per Pair;
+the six-Rule reading uses 19,476 of them and ignores R6's rows. See
 [ADR-0006](docs/adr/0006-fan-out-all-rules-in-one-call.md).
 _Avoid_: batching (that means the expensive model's discounted asynchronous mode), compound question
-(the fan-out sends seven questions, not one question with seven parts)
+(the fan-out sends several questions, not one question with several parts)
 
 **Cutoff**:
 The P(yes) at or below which a Clause is Binned. One per Rule. In plain speech, "the line". It is a
@@ -201,7 +204,7 @@ reading is at the low end, just under the Free Saving point, where nearly everyt
 Precision is low by design. Quoting Precision at a low Cutoff as Jev's accuracy would be wrong.
 
 **Operating Point**:
-The one Cutoff, **shared by all seven Rules**, chosen on a **Selection Half** of the documents as the
+The one Cutoff, **shared by all the Rules asked**, chosen on a **Selection Half** of the documents as the
 highest at which the Lost Provisions stay within the **Loss Budget**, then reported on the **Report
 Half**. It answers "if a legal reader will accept only this much loss, how much does Jev still skip?"
 and is the only place a Cutoff is chosen, not read. Done both ways round so every document is reported

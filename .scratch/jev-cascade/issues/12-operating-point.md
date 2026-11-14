@@ -21,3 +21,9 @@ add one line on cost per 1,000 Clauses against sending everything to the expensi
 
 **Status:** resolved. Result: 20.5% skipped and 1.6% lost at the 2% budget, 7.7% skipped and 1.2% lost
 at the 1% budget, and an unstable answer because one document's labels decide it.
+
+**Superseded 2026-11-14 (ADR-0008).** The result above is for seven Rules, the Rule set agreed with the
+reviewer, and stays here as the record. Minimum Commitment was then dropped after its results were seen.
+Over six Rules, held out: 31.5% skipped and 1.1% lost at the 1% budget; at the 2% budget 64.6% skipped
+but 4.2% lost, so that reading did not hold. Still unstable: which half chooses the Cutoff moves the skip
+from 14.6% to 51.0% at the 1% budget.

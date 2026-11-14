@@ -58,10 +58,11 @@ Both budgets are chosen on one half of the documents and read on the other, both
   the worse half. Do not quote its 64.6% skipped without that loss beside it.
 - **Dropping R6 did not make the answer stable.** Which half chooses the Cutoff moves the skip from
   14.6% to 51.0% at the 1% budget.
-- **No single Rule dominates the six-Rule losses.** On the report halves, at the 1% budget R7 (Change Of
-  Control) lost 3 of the 4 and R8 lost 1. At the 2% budget R7 lost 5 of the 16, R1 4, R2 3, R8 3 and R5
-  1. R7 is the largest owner and is **not** dropped; that is a decision for the user, and a second
-  Rule removed after seeing results would make the six-Rule figures harder to defend, not easier.
+- **R7 (Change Of Control) leads the six-Rule losses.** On the report halves, at the 1% budget it lost
+  3 of the 4 (R8 lost the other 1), which at the headline budget is most of them. At the 2% budget R7
+  lost 5 of the 16, ahead of R1 4, R2 3, R8 3 and R5 1. R7 was **kept deliberately**: dropping it too
+  would be a second removal made after seeing results, and would make the six-Rule figures harder to
+  defend, not easier. Whether to drop it is the user's decision, not settled here.
 - **The losses sit in few documents.** PACIRA holds 2 of the 4 losses at 1% and 5 of the 16 at 2%. Its
   labels were not read to explain them away.
 
@@ -81,10 +82,11 @@ Both budgets are chosen on one half of the documents and read on the other, both
 
 ## Considered and rejected
 
-- **Keeping R6 and flagging the SUMMAFOUR highlights as noise.** That needs a lawyer to say they are
-  noise. Without one it is a guess, and the first rescue of the result would be a second.
-- **Dropping R7 as well.** See above: it leads the losses but does not dominate, and the user has not
-  decided it.
+- **Keeping R6 and declaring the SUMMAFOUR highlights label noise.** That needs a lawyer to say they
+  are noise. Without one it is a guess, and it would be a second after-the-fact rescue of the result,
+  on top of the removal this ADR already records.
+- **Dropping R7 as well.** See above: it leads the losses and is the user's call, not made here, and a
+  second removal after seeing results would weaken the figures further.
 - **Re-asking Jev with six questions.** Possible and cheap (the seven-question run cost $0.085), but it would add a third
   reading to explain, and the user decided on the cached run.
 

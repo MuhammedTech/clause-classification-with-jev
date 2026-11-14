@@ -57,3 +57,18 @@ def test_nothing_that_grades_a_run_imports_the_seeded_sampling_module():
     for name in GRADING_MODULES:
         text = (source_dir / name).read_text(encoding="utf-8")
         assert "sample_study" not in text, f"{name} must not depend on the sampling module"
+
+
+#: ADR-0007 reopens one thing ADR-0003 closed: a Cutoff is now **chosen**, on one half of the
+#: documents and reported on the other. The choosing lives in `operating_point.py` alone, and it
+#: splits by a hash, so it needs no random generator and the identifier check above still holds for
+#: it. What this test keeps true is that the report's fixed-Cutoff reading never depends on it.
+CUTOFF_CHOOSING_MODULES = ("operating_point", "operating_point_report", "operating_point_cli")
+
+
+def test_nothing_that_grades_a_run_imports_the_module_that_chooses_a_cutoff():
+    source_dir = Path(jev_cascade.__file__).parent
+    for name in GRADING_MODULES:
+        text = (source_dir / name).read_text(encoding="utf-8")
+        for chooser in CUTOFF_CHOOSING_MODULES:
+            assert chooser not in text, f"{name} must not depend on {chooser}"

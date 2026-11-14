@@ -6,7 +6,8 @@ and how accurate it is against lawyer labels, per rule, on CUAD license agreemen
 Decisions behind this vocabulary: [ADR-0001](docs/adr/0001-jev-only-evaluation.md) (Jev only),
 [ADR-0003](docs/adr/0003-recall-precision-on-one-cutoff.md) (how grading works),
 [ADR-0004](docs/adr/0004-document-partition-into-clauses.md) (what a Clause is),
-[ADR-0005](docs/adr/0005-seven-rules-one-question-each.md) (the Rulebook). Measured facts about the
+[ADR-0005](docs/adr/0005-seven-rules-one-question-each.md) (the Rulebook),
+[ADR-0007](docs/adr/0007-operating-point-chosen-on-one-half.md) (the Operating Point). Measured facts about the
 data are in [docs/cuad-ground-truth.md](docs/cuad-ground-truth.md).
 
 ## Language
@@ -189,8 +190,9 @@ _Avoid_: false positive rate, accuracy
 **Free Saving**:
 The share of contract words Binned strictly below the lowest P(yes) Jev gave to any Clause holding a
 Highlight, per Rule. No Highlight is Lost there, so it costs nothing. It is read off the Cutoff Curve
-after seeing it, so it is a headline and never a tuned Cutoff.
-_Avoid_: safe cutoff, optimal cutoff, operating point
+after seeing it, so it is a headline and never a chosen Cutoff. An **Operating Point** is the one that
+is chosen, on a Selection Half.
+_Avoid_: safe cutoff, optimal cutoff
 
 **Classifier Reading / Cascade Reading**:
 The two ways to read the Cutoff Curve. The classifier reading is around a Cutoff of 0.5, where
@@ -198,10 +200,29 @@ P(yes) is taken as a yes/no answer and Recall and Precision mean what they usual
 reading is at the low end, just under the Free Saving point, where nearly everything is Escalated and
 Precision is low by design. Quoting Precision at a low Cutoff as Jev's accuracy would be wrong.
 
+**Operating Point**:
+The one Cutoff, **shared by all seven Rules**, chosen on a **Selection Half** of the documents as the
+highest at which the Lost Provisions stay within the **Loss Budget**, then reported on the **Report
+Half**. It answers "if a legal reader will accept only this much loss, how much does Jev still skip?"
+and is the only place a Cutoff is chosen, not read. Done both ways round so every document is reported
+on exactly once. See [ADR-0007](docs/adr/0007-operating-point-chosen-on-one-half.md). The one exception
+to "one Cutoff per Rule" above.
+_Avoid_: tuned cutoff, optimal cutoff, safe cutoff (a Free Saving is not chosen on anything held out)
+
+**Loss Budget**:
+The share of lawyer-marked Provisions the Operating Point is allowed to Lose on its Selection Half,
+rounded down to a whole provision. Read at 1% and 2%.
+_Avoid_: miss budget (ADR-0002's, which counted in different units and is retired)
+
+**Selection Half / Report Half**:
+The two halves the documents are split into by a hash of the document id (no random generator). The
+Cutoff is chosen on the Selection Half and its skip, loss and cost are read on the Report Half.
+_Avoid_: train / test, fold (ADR-0003 removed folds; this is one split used both ways round)
+
 **Cutoff Curve**:
 The table of Clause Recall, Provision Recall, Precision, Lost Provisions and Binned Share at every
 observed P(yes) for a Rule. The result of the experiment. Nothing is fitted, so nothing can overfit.
-_Avoid_: operating point, tuned cutoff, ROC
+_Avoid_: tuned cutoff, ROC
 
 ## Retired terms
 

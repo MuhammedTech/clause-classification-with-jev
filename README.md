@@ -7,16 +7,28 @@ judged against lawyer highlights.
 ## Results
 
 **Read this first: [Jev Cascade Results](https://claude.ai/artifact/3Cg59wmFZPDAt4cSS8P5xX)**, a plain-language
-walkthrough of the real run with worked examples. If the link does not open for you, ask the owner to
-share it; the same numbers are in the report that `--from-cache` rebuilds (see Running).
+walkthrough of the real run at the fixed 0.5 Cutoff, with worked examples. The Operating Point below is
+in `docs/operating-point.md`. If the link does not open for you, ask the owner to share it; the same
+numbers are in the report that `--from-cache` rebuilds (see Running).
 
-The real run was all 53 license agreements against seven Rules (3,246 Clauses, `jev-1.14.0`):
+The real run was all 53 license agreements against seven Rules (3,246 Clauses, `jev-1.14.0`). The
+question is how much Jev can skip, and the answer depends on how many lawyer-marked provisions you will
+let it lose:
 
-- **77.3% of Clauses are Fully Binned** at the 0.5 Cutoff (2,510 of 3,246), so the expensive model never reads them.
-- **The price: 44 of 429 lawyer-marked provisions (10.3%) are lost** inside those Clauses. Quote the two numbers together.
-- **Estimated saving against Claude Sonnet 5.5: about $24 of $26.45 (91.4%)**, from token counts at list prices.
-  The expensive model was never run, so this is an order of magnitude, not an invoice. Jev's own cost was $0.085 as it reported.
-- Five Rules catch 92 to 94% of lawyer-marked Clauses; Minimum Commitment catches 60% and Change Of Control 75%.
+- **At a loss a legal reader would accept (up to 2% of marked provisions): Jev skips about 1 Clause in 5
+  (20.5%)** and loses 7 of 429 provisions (1.6%). At 1% it skips only 7.7% and loses 5 (1.2%, so just over
+  the budget). The Cutoff for each was chosen on one half of the documents and read on the other, both ways
+  round: `docs/operating-point.md`.
+- **Cost, per 1,000 Clauses against sending everything to Claude Sonnet 5.5:** about $4.23 saved of $8.15
+  at the 2% budget (an estimate: the expensive model was never run, and that figure rests on an assumed
+  answer length; counting only the reading, the saving is about $0.18, or 16%).
+- **At a fixed Cutoff of 0.5, Jev skips 77.3% of Clauses but loses 44 of 429 provisions (10.3%).** That is
+  the other end of the same curve, and too much loss for a legal team. Never quote the 77% without the 10%.
+- **The answer is unstable.** The two halves disagree widely, and 5 of the 7 provisions lost at the 2% budget
+  are in one document whose Minimum Commitment highlights look like label noise (software performance
+  specs, not purchase commitments). That is the main limitation.
+- Five Rules catch 92 to 94% of lawyer-marked Clauses at 0.5; Minimum Commitment catches 60% and Change Of
+  Control 75%.
 
 Start with `GLOSSARY.md` for the vocabulary, `.scratch/jev-cascade/spec.md` for the method, and
 `docs/cuad-ground-truth.md` for what has already been measured about the data.
@@ -78,8 +90,16 @@ calls are in flight (32 for the real client, 1 for the stub); it changes the spe
 | `evaluator.py` | The pure metrics at one Cutoff, the Cutoff Curve and the free saving (ADR-0003) |
 | `cost.py` | What the expensive model would be asked and cost, Jev's cost and time, per 1,000 Clauses (pure; no model is called) |
 | `report.py` | Rendering the Markdown report |
+| `operating_point.py`, `operating_point_report.py`, `operating_point_cli.py` | The Operating Point: a Cutoff chosen on one half of the documents and reported on the other, with its cost (ADR-0007). Nothing that grades a run imports these |
 | `charts.py` | The per-Rule curve PNG and the curve CSV |
 | `pipeline.py` | The stages wired together; the CLI is a thin wrapper |
+
+The Operating Point (ticket 12) reads the real run's stored answers and writes `docs/operating-point.md`.
+It needs no key and makes no calls, and rebuilds `out/real/report.md` from the cache as a side effect:
+
+```
+uv run jev-cascade-operating-point --out out/real
+```
 
 Ticket 08's sample (three question types, heading on against off, 1,357 real calls) is its own
 command; it prints the plan before it asks anything and writes `docs/question-type-and-heading-sample.md`:
@@ -91,7 +111,7 @@ uv run jev-cascade-sample --jev real --from-cache   # rebuild the report, no key
 
 ## Status
 
-Tickets 01 to 09 and 11 are built. The real run is done: all 53 documents against all seven Rules,
+Tickets 01 to 09, 11 and 12 are built. The real run is done: all 53 documents against all seven Rules,
 22,722 Pairs in 3,246 fan-out calls, `jev-1.14.0`, 179 s, $0.085 as Jev reported it. The default
 command still uses the signal-free stub (its figures carry no signal), so the real report is the one
 built with `--jev real --full --out out/real`, and it is reproducible from the cache, not from scratch.
@@ -100,7 +120,7 @@ Rules with their document and span counts, and the gate, which all seven pass.
 
 Each ticket in `.scratch/jev-cascade/issues/` deepened one stage: 03 the Splitter, 04 and 05 the
 metrics and the Cutoff Curve, 06 cost and time, 07 the real Jev client, 08 the question type and
-heading, and 09 the real run.
+heading, 09 the real run, and 12 the Operating Point.
 
 One decision is waiting on the user: **Uncapped Liability (R4) passes the gate** over all 53
 documents, at 17 documents and 26 spans. ADR-0005 dropped it partly for failing, measured before

@@ -69,9 +69,10 @@ Both budgets are chosen on one half of the documents and read on the other, both
 
 - **The baseline falls from $8.15 to $7.11 per 1,000 Clauses** only because Claude would be asked six
   questions, not seven. That is not a saving, and the two baselines must not be set against each other.
-- **Jev's own cost still includes the R6 question.** The real run asked all seven questions in each of
-  3,246 fan-out calls; its measured 2,019,752 input tokens, 179 s and $0.085 are for those calls. The
-  six-Rule figures use it unchanged, which is conservative: asking six questions would cost slightly less.
+- **What Jev actually billed is for seven questions.** The real run asked all seven in each of 3,246
+  fan-out calls; its measured 2,019,752 input tokens, 179 s and $0.085 are for those calls and are
+  reported as measured, so they slightly overstate a six-question run. The *estimated* Jev part in the
+  cost tables is recomputed for six questions per Clause ($0.231 over the run, against $0.27 for seven).
 - **The six-Rule P(yes) came from seven-question calls.** ADR-0006 notes a probability can move when
   other questions ride in the same call. A fresh six-question run could give slightly different
   numbers. It was not made.

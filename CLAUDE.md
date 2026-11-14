@@ -1,6 +1,6 @@
 ## Orientation
 
-Four things that cost time to rediscover:
+Five things that cost time to rediscover:
 
 - **The CUAD dataset is not in this repo.** It is at `~/personal_coding/playground/cuad/CUAD_v1/`
   (`CUAD_v1.json`, `master_clauses.csv`, `full_contract_txt/`). Treat the path as configuration.
@@ -12,6 +12,11 @@ Four things that cost time to rediscover:
 - **Some glossary terms inverted.** "Kept" and "Keep Share" used to mean the text Jev discards. The
   current terms are **Binned** (discarded) and **Escalated** (sent to the expensive model). See the
   retired-terms table at the bottom of `GLOSSARY.md` before reading any older note.
+- **The Rulebook has six Rules, not seven.** Minimum Commitment (R6) was dropped after the real run, once
+  its results were seen, with no lawyer and no more data. That departs from the Rule set agreed with the
+  reviewer, so six-Rule figures are more favourable than a Rule set fixed in advance. Read ADR-0008 before
+  quoting any number, and keep the seven-Rule figures (it holds both) beside the six-Rule ones. The real
+  run's cache still holds R6's answers and ignores them.
 
 ## Agent skills
 

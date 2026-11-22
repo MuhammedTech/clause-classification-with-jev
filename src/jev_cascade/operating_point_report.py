@@ -130,7 +130,7 @@ def render_operating_point(inputs: OperatingPointInputs) -> str:
         "1. Split the documents in two by a hash of the document id. No random generator, so the split is the same every time."
     )
     out.append(
-        "2. On the **Selection Half**, take the highest Cutoff, **one shared by all {_rules_in_words()} Rules**, at which "
+        f"2. On the **Selection Half**, take the highest Cutoff, **one shared by all {_rules_in_words()} Rules**, at which "
         "the Provisions Lost stay within the **Loss Budget**, a share of that half's Provisions."
     )
     out.append("3. Apply that Cutoff to the **Report Half** and read the skip, the loss and the cost there.")

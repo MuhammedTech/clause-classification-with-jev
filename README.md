@@ -39,9 +39,10 @@ Start with `GLOSSARY.md` for the vocabulary, `.scratch/jev-cascade/spec.md` for 
 
 ## License
 
-The code is MIT (see `LICENSE`). No CUAD data is in this repository. CUAD itself is published under
-CC BY 4.0 and must be credited to its authors where it is used; the dataset is downloaded separately
-(see below).
+The code is MIT (see `LICENSE`). The CUAD dataset is not included and is downloaded separately (see
+below), but a few tests quote short excerpts from CUAD contracts so each case is something a contract
+actually does. CUAD is curated and maintained by The Atticus Project, Inc. and published under
+CC BY 4.0; credit it wherever it is used (https://github.com/TheAtticusProject/cuad).
 
 ## The dataset is not in this repo
 

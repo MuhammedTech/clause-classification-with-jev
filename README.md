@@ -1,14 +1,14 @@
 # Clause classification with Jev
 
-Measures how much CUAD license-agreement text Jev, a cheap decision model, can **Bin** — discard
-before an expensive model ever reads it — and what that costs in provisions nobody would look at,
-judged against lawyer highlights.
+Measures how much CUAD license-agreement text Jev, a cheap decision model (TypeSafe calls it a System
+One model), can **Bin** — discard before an expensive model ever reads it — and what that costs in
+provisions nobody would look at, judged against lawyer highlights.
 
 ## Results
 
-**Read this first: [Jev Cascade Results](https://claude.ai/artifact/3Cg59wmFZPDAt4cSS8P5xX)**, a plain-language
-walkthrough of the real run with a worked example, leading with the Operating Point below (the full
-tables are in `docs/operating-point.md`). If the link does not open for you, ask the owner to share it; the same
+**Read this first: [the Operating Point tables](docs/operating-point.md)** — the full numbers, in this
+repository, with the caveats beside them. For a plain-language walkthrough of the real run with a worked
+example, see the [Jev Cascade Results page](https://claude.ai/artifact/3Cg59wmFZPDAt4cSS8P5xX). The same
 numbers are in the report that `--from-cache` rebuilds (see Running).
 
 The real run was all 53 license agreements against seven Rules (3,246 Clauses, `jev-1.14.0`). **Minimum
@@ -36,6 +36,12 @@ lawyer-marked provisions you will let it lose:
 
 Start with `GLOSSARY.md` for the vocabulary, `.scratch/jev-cascade/spec.md` for the method, and
 `docs/cuad-ground-truth.md` for what has already been measured about the data.
+
+## License
+
+The code is MIT (see `LICENSE`). No CUAD data is in this repository. CUAD itself is published under
+CC BY 4.0 and must be credited to its authors where it is used; the dataset is downloaded separately
+(see below).
 
 ## The dataset is not in this repo
 

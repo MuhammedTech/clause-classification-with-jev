@@ -7,7 +7,9 @@ provisions nobody would look at, judged against lawyer highlights.
 ## Results
 
 **Read this first: [the Operating Point tables](docs/operating-point.md)** — the full numbers, in this
-repository, with the caveats beside them. For a plain-language walkthrough of the real run with a worked
+repository, with the caveats beside them. The one picture is
+[the Cutoff trade-off](docs/cutoff-tradeoff.png): how much Jev skips against how much it loses, with
+the Operating Point and the fixed 0.5 Cutoff marked, drawn from the real run's stored answers. For a plain-language walkthrough of the real run with a worked
 example, see the [Jev Cascade Results page](https://claude.ai/artifact/3Cg59wmFZPDAt4cSS8P5xX). The same
 numbers are in the report that `--from-cache` rebuilds (see Running).
 
